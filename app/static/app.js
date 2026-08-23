@@ -235,17 +235,17 @@ async function loadBackup() {
   } catch (e) { toast(e.message, "err"); }
 }
 
-actions["backup-save"] = async function () {
+async function backupSave() {
   toast("Leyendo y guardando configuración…", "info");
   const r = await api(`/devices/${enc(S.current)}/backup`, { method: "POST" });
   toast("✓ " + (r.detail || "Respaldo guardado"), "ok"); loadBackup();
-};
-actions["backup-restore"] = async function () {
+}
+async function backupRestore() {
   if (!confirm("¿Restaurar la configuración guardada en el equipo?")) return;
   const r = await api(`/devices/${enc(S.current)}/restore`, { method: "POST" });
   if (r.ok === false) return toast(r.detail, "err");
   report(r); refreshAfterChange(r);
-};
+}
 
 $("#backup-auto").addEventListener("change", async () => {
   try {
@@ -286,7 +286,7 @@ function renderParams() {
 $("#adv-search").addEventListener("input", renderParams);
 $("#adv-writable").addEventListener("change", renderParams);
 
-actions["adv-refresh"] = async function () {
+async function advRefresh() {
   toast("Descubriendo todo el árbol del equipo…", "info");
   await api(`/devices/${enc(S.current)}/refresh`, { method: "POST" });
   for (let i = 0; i < 6; i++) {
@@ -295,7 +295,7 @@ actions["adv-refresh"] = async function () {
     if (advCache.length > 60) break;   // ya llegó el árbol grande
   }
   toast("✓ Árbol actualizado (" + advCache.length + " parámetros)", "ok");
-};
+}
 
 document.addEventListener("click", async (e) => {
   const b = e.target.closest("[data-advsave]");
@@ -430,6 +430,11 @@ const actions = {
     toast("Programación eliminada", "ok"); loadSchedule();
   },
 };
+
+// registrar acciones definidas fuera del objeto (evita usar 'actions' antes de crearlo)
+actions["adv-refresh"] = advRefresh;
+actions["backup-save"] = backupSave;
+actions["backup-restore"] = backupRestore;
 
 document.addEventListener("click", async (e) => {
   const btn = e.target.closest("[data-action]");
