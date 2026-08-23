@@ -11,6 +11,16 @@ from fastapi.staticfiles import StaticFiles
 from .db import init_db
 from .routers import auth, config, devices, settings, system
 
+
+class NoCacheStatic(StaticFiles):
+    """Sirve los estaticos con no-cache para que el navegador siempre tome
+    la ultima version del panel tras cada despliegue."""
+
+    def file_response(self, *args, **kwargs):
+        resp = super().file_response(*args, **kwargs)
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return resp
+
 app = FastAPI(
     title="GenieACS API",
     description="Gestion de CPEs (WiFi, IP, PPPoE, DNS, actualizaciones, hora, "
@@ -38,4 +48,4 @@ app.include_router(settings.router)
 # Front-end para usuario final (SPA vanilla). Se monta al final para que las
 # rutas de la API y /docs tengan precedencia; el resto sirve la app web.
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
-app.mount("/", StaticFiles(directory=_STATIC_DIR, html=True), name="ui")
+app.mount("/", NoCacheStatic(directory=_STATIC_DIR, html=True), name="ui")
