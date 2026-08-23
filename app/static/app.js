@@ -262,9 +262,9 @@ $$(".tab").forEach(t => t.addEventListener("click", () => {
   if (t.dataset.tab === "access" && lastStatus) {
     $("#acc-remote").checked = lastStatus.remote_enable === true;
     $("#acc-remoteport").value = lastStatus.remote_port || "";
-    if (lastStatus.remote_protocol) $("#acc-remoteproto").value = lastStatus.remote_protocol;
+    $("#acc-https").checked = (lastStatus.remote_protocol || "HTTPS") !== "HTTP";
     const hasProto = !!lastStatus.remote_protocol;   // TR-181 lo expone; Cudy no
-    $("#acc-remoteproto").closest("label").style.display = hasProto ? "" : "none";
+    $("#acc-https-wrap").style.display = hasProto ? "" : "none";
     $("#acc-user").value = (lastStatus.admin_user || "").trim();
   }
 }));
@@ -605,7 +605,7 @@ const actions = {
   async access() {
     const body = {};
     body.remote_enable = $("#acc-remote").checked;
-    body.remote_protocol = $("#acc-remoteproto").value;
+    body.remote_protocol = $("#acc-https").checked ? "HTTPS" : "HTTP";
     if ($("#acc-remoteport").value) body.remote_port = +$("#acc-remoteport").value;
     if ($("#acc-user").value.trim()) body.admin_user = $("#acc-user").value.trim();
     if ($("#acc-pass").value) body.admin_password = $("#acc-pass").value;

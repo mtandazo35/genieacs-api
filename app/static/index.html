@@ -171,7 +171,7 @@
         <h3 style="margin-top:0">Acceso remoto (WAN)</h3>
         <div class="row">
           <label class="chk"><input type="checkbox" id="acc-remote"> Permitir administración por WAN</label>
-          <label>Protocolo<select id="acc-remoteproto"><option value="HTTPS">HTTPS</option><option value="HTTP">HTTP</option></select></label>
+          <label class="chk" id="acc-https-wrap"><input type="checkbox" id="acc-https" checked> HTTPS <span class="muted small">(desmarcado = HTTP)</span></label>
           <label>Puerto<input id="acc-remoteport" type="number" min="1" max="65535" placeholder="p.ej. 8080 / 443"></label>
         </div>
         <h3>Usuario administrador del equipo</h3>
