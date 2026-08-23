@@ -51,6 +51,7 @@ TR098 = {
         "uptime": "InternetGatewayDevice.DeviceInfo.UpTime",
         "firmware": "InternetGatewayDevice.DeviceInfo.SoftwareVersion",
         "cpu": "InternetGatewayDevice.DeviceInfo.ProcessStatus.CPUUsage",
+        "mac": "InternetGatewayDevice.WANDevice.1.WANEthernetInterfaceConfig.MACAddress",
     },
 }
 

@@ -174,7 +174,7 @@ function renderStatus(st) {
   const dhcp = (st.dhcp_min || st.dhcp_max) ? `${st.dhcp_min || "?"} – ${st.dhcp_max || "?"}` : null;
   const sections = [
     ["Dispositivo", [
-      cell("Modelo", st.model), cell("Serial", st.serial), cell("Firmware", st.firmware),
+      cell("Modelo", st.model), cell("Serial", st.serial), cell("MAC", st.mac), cell("Firmware", st.firmware),
       cell("Uptime", st.uptime != null ? fmtUptime(st.uptime) : null),
       cell("CPU", st.cpu != null ? st.cpu + "%" : null),
       cell("Último reporte", fmtDate(st.last_inform)),
