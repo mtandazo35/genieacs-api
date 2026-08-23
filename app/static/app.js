@@ -235,6 +235,9 @@ function refreshAfterChange(r) {
   setTimeout(() => readDevice(true), r && r.applied ? 1500 : 4000);
 }
 
+// vacia los campos indicados tras aplicar un cambio
+function clearInputs(...ids) { ids.forEach(id => { const el = $("#" + id); if (el) el.value = ""; }); }
+
 // ===== Acciones =====
 const actions = {
   async wifi() {
@@ -246,6 +249,7 @@ const actions = {
     body.hidden = $("#wifi-hidden").checked;
     const r = await api(`/devices/${enc(S.current)}/wifi`, { method: "PUT", body });
     report(r); refreshAfterChange(r);
+    clearInputs("wifi-ssid", "wifi-pass", "wifi-channel");
   },
   async net() {
     const body = {};
@@ -257,6 +261,7 @@ const actions = {
     if ($("#net-lease").value) body.dhcp_lease = +$("#net-lease").value;
     const r = await api(`/devices/${enc(S.current)}/ip`, { method: "PUT", body });
     report(r); refreshAfterChange(r);
+    clearInputs("net-ip", "net-mask", "net-min", "net-max", "net-lease");
   },
   async pppoe() {
     const body = { enable: $("#ppp-enable").checked };
@@ -264,12 +269,14 @@ const actions = {
     if ($("#ppp-pass").value) body.password = $("#ppp-pass").value;
     const r = await api(`/devices/${enc(S.current)}/pppoe`, { method: "PUT", body });
     report(r); refreshAfterChange(r);
+    clearInputs("ppp-user", "ppp-pass");
   },
   async dns() {
     const servers = $("#dns-servers").value.split(/\s+/).map(s => s.trim()).filter(Boolean);
     if (!servers.length) return toast("Indica al menos un servidor DNS", "err");
     const r = await api(`/devices/${enc(S.current)}/dns`, { method: "PUT", body: { scope: $("#dns-scope").value, servers } });
     report(r); refreshAfterChange(r);
+    clearInputs("dns-servers");
   },
   async time() {
     const body = {};
@@ -278,6 +285,7 @@ const actions = {
     if ($("#time-ntp2").value.trim()) body.ntp2 = $("#time-ntp2").value.trim();
     const r = await api(`/devices/${enc(S.current)}/time`, { method: "PUT", body });
     report(r); refreshAfterChange(r);
+    clearInputs("time-tz", "time-ntp1", "time-ntp2");
   },
   async fw() {
     const f = $("#fw-file").value;
