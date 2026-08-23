@@ -87,8 +87,18 @@ button.small{padding:.3rem .6rem;font-size:.8rem}
 .tabs{display:flex;gap:.3rem;flex-wrap:wrap;border-bottom:1px solid var(--line);margin-bottom:1.2rem}
 .tab{background:transparent;color:var(--muted);border-radius:8px 8px 0 0;padding:.5rem .9rem}
 .tab.active{background:var(--card);color:var(--txt);border:1px solid var(--line);border-bottom:0}
-.panel{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:1.3rem;max-width:560px}
-.panel.wide{max-width:900px}
+/* mismo tamaño en todas las pestañas para que no salte al cambiar */
+.panel{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:1.3rem;
+  max-width:860px;width:100%;min-height:480px}
+.panel.wide{max-width:860px}
+/* los formularios cortos no estiran los campos a lo ancho */
+.panel[data-panel="wifi"] > *:not(.row),
+.panel[data-panel="net"] > *,
+.panel[data-panel="wan"] > *,
+.panel[data-panel="pppoe"] > *,
+.panel[data-panel="dns"] > *,
+.panel[data-panel="time"] > *,
+.panel[data-panel="fw"] > *{max-width:560px}
 .adv-list{margin-top:1rem;border:1px solid var(--line);border-radius:8px;max-height:60vh;overflow:auto}
 .adv-row{display:flex;justify-content:space-between;gap:1rem;padding:.5rem .8rem;border-bottom:1px solid var(--line);align-items:center}
 .adv-row:last-child{border-bottom:0}

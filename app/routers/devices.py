@@ -83,6 +83,39 @@ def _read(dev: dict, path: str):
     return node.get("_value") if isinstance(node, dict) else None
 
 
+_WAN_PREFIX = "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1"
+
+
+def _val(node: dict, key: str):
+    x = node.get(key) if isinstance(node, dict) else None
+    return x.get("_value") if isinstance(x, dict) else None
+
+
+async def _active_wan(device_id: str):
+    """Devuelve la conexion WAN realmente activa (ConnectionStatus=Connected),
+    no la instancia .1 fija. Este tipo de CPE tiene varias WANIPConnection."""
+    doc = await genie.get_device(device_id, [_WAN_PREFIX])
+    base = doc or {}
+    for part in _WAN_PREFIX.split("."):
+        base = base.get(part) if isinstance(base, dict) else None
+    if not isinstance(base, dict):
+        return None
+
+    def instances(coll):
+        node = base.get(coll)
+        return [v for k, v in node.items() if not k.startswith("_") and isinstance(v, dict)] if isinstance(node, dict) else []
+
+    for inst in instances("WANPPPConnection"):
+        if _val(inst, "ConnectionStatus") in ("Connected", "Up"):
+            return {"mode": "PPPoE", "ip": _val(inst, "ExternalIPAddress"),
+                    "gw": _val(inst, "DefaultGateway"), "ppp_user": _val(inst, "Username"), "ppp": True}
+    for inst in instances("WANIPConnection"):
+        if _val(inst, "ConnectionStatus") in ("Connected", "Up"):
+            return {"mode": _val(inst, "AddressingType"), "ip": _val(inst, "ExternalIPAddress"),
+                    "gw": _val(inst, "DefaultGateway"), "ppp": False}
+    return None
+
+
 @router.get("/{device_id}/status")
 async def device_status(device_id: str, dev=Depends(authorized_device)):
     """Estado resumido leyendo la cache del ACS (no consulta al CPE)."""
@@ -99,6 +132,19 @@ async def device_status(device_id: str, dev=Depends(authorized_device)):
         r = resolve(pmap, k)
         if r:
             result[k] = _read(full, r[0])
+    # sobreescribir WAN con la conexion realmente activa (no la instancia .1 fija)
+    try:
+        aw = await _active_wan(device_id)
+        if aw:
+            result["wan_mode"] = aw["mode"]
+            result["wan_ip"] = aw["ip"]
+            result["wan_gateway"] = aw["gw"]
+            if aw.get("ppp"):
+                result["pppoe_enable"] = True
+                if aw.get("ppp_user"):
+                    result["pppoe_user"] = aw["ppp_user"]
+    except Exception:
+        pass
     return result
 
 
