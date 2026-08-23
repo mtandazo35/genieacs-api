@@ -94,16 +94,29 @@ _STATUS_KEYS = [
 async def list_devices(user: CurrentUser = Depends(current_user)):
     """Lista los CPE visibles para el usuario (admin=todos, ISP=por su tag)."""
     projection = ["_id", "_tags", "_lastInform", "_deviceId",
-                  "InternetGatewayDevice.DeviceInfo.SoftwareVersion"]
+                  "InternetGatewayDevice.DeviceInfo.SoftwareVersion",
+                  "InternetGatewayDevice.DeviceInfo.ModelName",
+                  "Device.DeviceInfo.SoftwareVersion", "Device.DeviceInfo.ModelName"]
     rows = await genie.query_devices(tenant_query(user), projection)
     meta = db.all_device_meta()
+
+    def _v(d, path):
+        node = d
+        for p in path.split("."):
+            if not isinstance(node, dict) or p not in node:
+                return None
+            node = node[p]
+        return node.get("_value") if isinstance(node, dict) else None
+
     out = []
     for d in rows:
-        info = (d.get("InternetGatewayDevice", {}).get("DeviceInfo", {}))
-        # _deviceId lo rellena GenieACS desde el Inform (siempre presente,
-        # sobrevive a un BOOTSTRAP que limpia el resto del arbol)
-        did = d.get("_deviceId", {})
+        did = d.get("_deviceId", {})   # lo rellena GenieACS desde el Inform (sobrevive a BOOTSTRAP)
         m = meta.get(d["_id"], {})
+        model = (_v(d, "Device.DeviceInfo.ModelName")
+                 or _v(d, "InternetGatewayDevice.DeviceInfo.ModelName")
+                 or did.get("_ProductClass"))
+        firmware = (_v(d, "Device.DeviceInfo.SoftwareVersion")
+                    or _v(d, "InternetGatewayDevice.DeviceInfo.SoftwareVersion"))
         out.append({
             "id": d["_id"],
             "name": m.get("name"),
@@ -111,9 +124,9 @@ async def list_devices(user: CurrentUser = Depends(current_user)):
             "tags": d.get("_tags", []),
             "last_inform": d.get("_lastInform"),
             "manufacturer": did.get("_Manufacturer"),
-            "model": did.get("_ProductClass"),
+            "model": model,
             "serial": did.get("_SerialNumber"),
-            "firmware": (info.get("SoftwareVersion") or {}).get("_value"),
+            "firmware": firmware,
         })
     return out
 
@@ -279,10 +292,13 @@ async def device_status(device_id: str, dev=Depends(authorized_device)):
     pmap = pick_map(full)
     did = full.get("_deviceId", {})
     meta = db.get_device_meta(device_id)
+    model_name = (_read(full, "Device.DeviceInfo.ModelName")
+                  or _read(full, "InternetGatewayDevice.DeviceInfo.ModelName")
+                  or did.get("_ProductClass"))
     result = {"id": device_id, "tags": full.get("_tags", []),
               "last_inform": full.get("_lastInform"),
               "manufacturer": did.get("_Manufacturer"),
-              "model": did.get("_ProductClass"),
+              "model": model_name,
               "serial": did.get("_SerialNumber"),
               "name": meta.get("name"), "customer": meta.get("customer"), "notes": meta.get("notes")}
     for k in _STATUS_KEYS:

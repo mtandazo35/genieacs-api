@@ -83,14 +83,14 @@ async def set_wan(device_id: str, body: WanIn, dev=Depends(authorized_device)):
     OJO: cambiar mal la WAN puede dejar al equipo sin internet y sin contacto
     con el ACS. En estatico se exigen ip, mascara y gateway."""
     from .devices import active_wan_prefix
-    if pick_map(dev).get("root") != "InternetGatewayDevice":
-        raise HTTPException(400, "La configuración de WAN por ahora solo está soportada en equipos TR-098. "
-                                 "Para este equipo (TR-181) usa la pestaña Avanzado.")
-    # --- PPPoE: se configura sobre WANPPPConnection.1 ---
+    is_tr098 = pick_map(dev).get("root") == "InternetGatewayDevice"
+
+    # --- PPPoE (TR-098 y TR-181) ---
     if body.mode == "pppoe":
         if not body.username:
             raise HTTPException(400, "PPPoE requiere usuario")
-        ppp = "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1"
+        ppp = ("InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1"
+               if is_tr098 else "Device.PPP.Interface.1")
         values = [[f"{ppp}.Enable", True, "xsd:boolean"],
                   [f"{ppp}.Username", body.username, "xsd:string"]]
         if body.password:
@@ -100,6 +100,10 @@ async def set_wan(device_id: str, body: WanIn, dev=Depends(authorized_device)):
         return ActionResult(applied=res["applied"], queued=res["queued"],
                             detail="WAN PPPoE configurada (se conecta si hay servidor PPPoE)")
 
+    # --- DHCP / estático: por ahora solo TR-098 ---
+    if not is_tr098:
+        raise HTTPException(400, "DHCP/estático por TR-181 aún no está soportado; usa la pestaña Avanzado. "
+                                 "PPPoE sí está soportado.")
     prefix = await active_wan_prefix(device_id)
     if body.mode == "dhcp":
         values = [[f"{prefix}.AddressingType", "DHCP", "xsd:string"]]
