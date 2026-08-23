@@ -43,8 +43,10 @@ def init_db() -> None:
 
 
 def get_user(username: str) -> dict | None:
+    """Devuelve el usuario exista o no activo (el chequeo de activo se hace
+    en el login y en la validacion del token)."""
     with connect() as c:
-        row = c.execute("SELECT * FROM users WHERE username=? AND active=1", (username,)).fetchone()
+        row = c.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
         return dict(row) if row else None
 
 

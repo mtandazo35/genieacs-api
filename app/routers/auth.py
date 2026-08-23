@@ -29,6 +29,8 @@ async def login(form: OAuth2PasswordRequestForm = Depends()):
     user = db.get_user(form.username)
     if not user or not verify_password(form.password, user["password"]):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Credenciales invalidas")
+    if not user["active"]:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Usuario desactivado")
     token = create_token(user["username"], user["role"], user["isp_tag"])
     return TokenOut(access_token=token, role=user["role"], isp=user["isp_tag"])
 

@@ -2,6 +2,7 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
+from . import db
 from .genieacs import genie
 from .security import decode_token
 
@@ -23,6 +24,9 @@ async def current_user(token: str = Depends(oauth2)) -> CurrentUser:
     data = decode_token(token)
     if not data or "sub" not in data:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token invalido o expirado")
+    u = db.get_user(data["sub"])
+    if not u or not u["active"]:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Usuario inexistente o desactivado")
     return CurrentUser(data["sub"], data.get("role", "isp"), data.get("isp"))
 
 
