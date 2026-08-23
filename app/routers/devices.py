@@ -105,14 +105,30 @@ async def _active_wan(device_id: str):
         node = base.get(coll)
         return [v for k, v in node.items() if not k.startswith("_") and isinstance(v, dict)] if isinstance(node, dict) else []
 
-    for inst in instances("WANPPPConnection"):
+    ipconns = instances("WANIPConnection")
+    pppconns = instances("WANPPPConnection")
+
+    def first_nonempty(conns, key):
+        for c in conns:
+            v = _val(c, key)
+            if v not in (None, ""):
+                return v
+        return None
+
+    # la instancia activa a veces no trae IP/gateway: usar la de cualquier instancia que si la tenga
+    ip_fallback = first_nonempty(ipconns, "ExternalIPAddress")
+    gw_fallback = first_nonempty(ipconns, "DefaultGateway")
+
+    for inst in pppconns:
         if _val(inst, "ConnectionStatus") in ("Connected", "Up"):
-            return {"mode": "PPPoE", "ip": _val(inst, "ExternalIPAddress"),
-                    "gw": _val(inst, "DefaultGateway"), "ppp_user": _val(inst, "Username"), "ppp": True}
-    for inst in instances("WANIPConnection"):
+            return {"mode": "PPPoE", "ip": _val(inst, "ExternalIPAddress") or ip_fallback,
+                    "gw": _val(inst, "DefaultGateway") or gw_fallback,
+                    "ppp_user": _val(inst, "Username"), "ppp": True}
+    for inst in ipconns:
         if _val(inst, "ConnectionStatus") in ("Connected", "Up"):
-            return {"mode": _val(inst, "AddressingType"), "ip": _val(inst, "ExternalIPAddress"),
-                    "gw": _val(inst, "DefaultGateway"), "ppp": False}
+            return {"mode": _val(inst, "AddressingType"),
+                    "ip": _val(inst, "ExternalIPAddress") or ip_fallback,
+                    "gw": _val(inst, "DefaultGateway") or gw_fallback, "ppp": False}
     return None
 
 
