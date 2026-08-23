@@ -2,6 +2,14 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
+## [1.1.0] - 2026-08-23
+
+### Añadido
+- **Diagnóstico desde el equipo**: ping y traceroute vía TR-069 (IPPingDiagnostics/TraceRouteDiagnostics) con resultados (éxitos/fallos, tiempos, saltos).
+- **Log de auditoría**: middleware que registra cada operación de escritura (usuario, acción, equipo, método, estado); pestaña Actividad (admin) y `GET /auth/audit` + `GET /devices/{id}/audit`.
+- Ficha: MAC (de la conexión activa), nº de clientes conectados por radio, clave PPPoE con mostrar/ocultar.
+- Pestaña Clientes (LAN hosts) e Identificación por equipo (nombre/cliente/nota).
+
 ## [1.0.0] - 2026-08-23
 
 Primera versión funcional: panel web + API multi-tenant sobre GenieACS, desplegada y probada contra equipos reales (Cudy WR3000/AX3000).
