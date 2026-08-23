@@ -258,7 +258,37 @@ $$(".tab").forEach(t => t.addEventListener("click", () => {
   if (t.dataset.tab === "ipv6") loadIPv6();
   if (t.dataset.tab === "wan") loadWan();
   if (t.dataset.tab === "clients") loadClients();
+  if (t.dataset.tab === "history") loadDeviceAudit();
 }));
+
+// etiqueta legible de una acción del log
+function actionLabel(a) {
+  const map = {
+    "wifi": "WiFi", "ip": "Red / IP", "wan": "WAN", "dns": "DNS", "time": "Hora",
+    "pppoe": "PPPoE", "reboot": "Reinicio", "factory-reset": "Factory reset",
+    "schedule-reboot": "Reinicio programado", "firmware": "Firmware", "label": "Nombre / cliente",
+    "param": "Parámetro (avanzado)", "backup": "Respaldo", "restore": "Restaurar config",
+    "autorestore": "Auto-restauración", "read": "Lectura", "refresh": "Refrescar árbol",
+    "diag/ping": "Ping", "diag/traceroute": "Traceroute", "read-bulk": "Lectura masiva",
+  };
+  const act = a.action || "";
+  if (map[act]) return map[act];
+  if (act.startsWith("tags/")) return "Tag: " + act.slice(5);
+  return `${a.method} ${act}`;
+}
+function auditStatus(s) { return (s >= 200 && s < 300 ? "✅ " : "⚠ ") + (s || ""); }
+
+// historial de cambios de este equipo
+async function loadDeviceAudit() {
+  try {
+    const rows = await api(`/devices/${enc(S.current)}/audit`);
+    $("#history-count").textContent = `${rows.length} evento(s)`;
+    $("#history-table tbody").innerHTML = rows.length
+      ? rows.map(a => `<tr><td>${esc(fmtAuditDate(a.ts))}</td><td>${esc(a.user || "?")}</td><td>${esc(actionLabel(a))}</td><td>${auditStatus(a.status)}</td></tr>`).join("")
+      : `<tr><td colspan="4" class="muted">Sin cambios registrados en este equipo.</td></tr>`;
+  } catch (e) { toast(e.message, "err"); }
+}
+$("#history-refresh").addEventListener("click", loadDeviceAudit);
 
 // clientes conectados (LAN hosts)
 async function loadClients() {
@@ -682,8 +712,8 @@ function renderAudit() {
   const items = auditCache.filter(a => !q || (`${a.user} ${a.action} ${a.device_id || ""} ${a.method}`).toLowerCase().includes(q));
   $("#audit-table tbody").innerHTML = items.map(a =>
     `<tr><td>${esc(fmtAuditDate(a.ts))}</td><td>${esc(a.user || "?")}</td>
-     <td>${esc(a.method)} ${esc(a.action)}</td><td>${esc(nameOf(a.device_id))}</td>
-     <td>${a.status >= 200 && a.status < 300 ? "✅ " : "⚠ "}${a.status || ""}</td></tr>`).join("")
+     <td>${esc(actionLabel(a))}</td><td>${esc(nameOf(a.device_id))}</td>
+     <td>${auditStatus(a.status)}</td></tr>`).join("")
     || `<tr><td colspan="5" class="muted">Sin actividad registrada.</td></tr>`;
 }
 $("#audit-filter").addEventListener("input", renderAudit);

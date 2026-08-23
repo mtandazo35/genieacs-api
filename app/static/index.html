@@ -87,6 +87,7 @@
         <button class="tab" data-tab="diag">Diagnóstico</button>
         <button class="tab" data-tab="power">Reinicio</button>
         <button class="tab" data-tab="backup">Respaldo</button>
+        <button class="tab" data-tab="history">Historial</button>
         <button class="tab" data-tab="adv">Avanzado</button>
       </div>
 
@@ -204,6 +205,12 @@
         <button type="button" id="clients-refresh" class="ghost small" style="margin-bottom:.8rem">↻ Actualizar</button>
         <div id="clients-count" class="muted small"></div>
         <table class="tbl" id="clients-table"><thead><tr><th>Equipo</th><th>IP</th><th>MAC</th><th>Conexión</th><th>Estado</th></tr></thead><tbody></tbody></table>
+      </div>
+
+      <div class="panel wide hidden" data-panel="history">
+        <button type="button" id="history-refresh" class="ghost small" style="margin-bottom:.8rem">↻ Actualizar</button>
+        <div id="history-count" class="muted small"></div>
+        <table class="tbl" id="history-table"><thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Estado</th></tr></thead><tbody></tbody></table>
       </div>
 
       <div class="panel wide hidden" data-panel="adv">
