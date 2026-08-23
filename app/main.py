@@ -5,7 +5,6 @@ programados) para que paneles/facturacion no tengan que hablar TR-069 crudo.
 """
 import asyncio
 import os
-from urllib.parse import unquote
 
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
@@ -56,12 +55,13 @@ async def audit_middleware(request: Request, call_next):
                 data = decode_token(auth_h[7:])
                 if data:
                     user = data.get("sub", "?")
+            # Starlette ya entrega el path decodificado una vez → parts[1] es el _id real
             parts = path.strip("/").split("/")
             device_id, action = None, parts[0]
             if parts[0] == "devices" and len(parts) >= 3:
-                device_id = unquote(parts[1]); action = "/".join(parts[2:])
+                device_id = parts[1]; action = "/".join(parts[2:])
             elif parts[0] == "devices" and len(parts) == 2:
-                device_id = unquote(parts[1]); action = "device"
+                device_id = parts[1]; action = "device"
             elif len(parts) >= 2:
                 action = "/".join(parts[:2])
             db.add_audit(user, device_id, action, request.method, path, response.status_code)
