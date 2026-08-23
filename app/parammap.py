@@ -16,12 +16,14 @@ TR098 = {
         "wifi_2g_enable": ("InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.Enable", "xsd:boolean"),
         "wifi_2g_channel": ("InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.Channel", "xsd:unsignedInt"),
         "wifi_2g_hidden": ("InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSIDAdvertisementEnabled", "xsd:boolean"),
+        "wifi_2g_clients": ("InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.AssociatedDeviceNumberOfEntries", "xsd:unsignedInt"),
         # --- WiFi 5 GHz (WLANConfiguration.2) ---
         "wifi_5g_ssid": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.2.SSID",
         "wifi_5g_password": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.2.X_CUDY_Password",
         "wifi_5g_enable": ("InternetGatewayDevice.LANDevice.1.WLANConfiguration.2.Enable", "xsd:boolean"),
         "wifi_5g_channel": ("InternetGatewayDevice.LANDevice.1.WLANConfiguration.2.Channel", "xsd:unsignedInt"),
         "wifi_5g_hidden": ("InternetGatewayDevice.LANDevice.1.WLANConfiguration.2.SSIDAdvertisementEnabled", "xsd:boolean"),
+        "wifi_5g_clients": ("InternetGatewayDevice.LANDevice.1.WLANConfiguration.2.AssociatedDeviceNumberOfEntries", "xsd:unsignedInt"),
         # --- LAN / IP ---
         "lan_ip": "InternetGatewayDevice.LANDevice.1.LANHostConfigManagement.IPInterface.1.IPInterfaceIPAddress",
         "lan_mask": "InternetGatewayDevice.LANDevice.1.LANHostConfigManagement.IPInterface.1.IPInterfaceSubnetMask",

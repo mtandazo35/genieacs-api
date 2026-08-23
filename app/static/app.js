@@ -193,10 +193,12 @@ function renderStatus(st) {
     ["WiFi 2.4 GHz", [
       cell("SSID", st.wifi_2g_ssid), pwCell("Clave", st.wifi_2g_password),
       cell("Canal", st.wifi_2g_channel), cell("Radio", onoff(st.wifi_2g_enable)),
+      cell("Conectados", st.wifi_2g_clients),
     ]],
     ["WiFi 5 GHz", [
       cell("SSID", st.wifi_5g_ssid), pwCell("Clave", st.wifi_5g_password),
       cell("Canal", st.wifi_5g_channel), cell("Radio", onoff(st.wifi_5g_enable)),
+      cell("Conectados", st.wifi_5g_clients),
     ]],
   ];
   $("#dev-status").innerHTML = sections.map(([title, cells]) =>
