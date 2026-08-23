@@ -8,8 +8,10 @@ import os
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+import asyncio
+
 from .db import init_db
-from .routers import auth, config, devices, firmware, settings, system
+from .routers import auth, backup, config, devices, firmware, settings, system
 
 
 class NoCacheStatic(StaticFiles):
@@ -30,8 +32,10 @@ app = FastAPI(
 
 
 @app.on_event("startup")
-def _startup():
+async def _startup():
     init_db()
+    # bucle de auto-restauracion de config tras factory reset
+    asyncio.create_task(backup.enforce_loop())
 
 
 @app.get("/health", tags=["meta"])
@@ -44,6 +48,7 @@ app.include_router(devices.router)
 app.include_router(config.router)
 app.include_router(system.router)
 app.include_router(firmware.router)
+app.include_router(backup.router)
 app.include_router(settings.router)
 
 # Front-end para usuario final (SPA vanilla). Se monta al final para que las

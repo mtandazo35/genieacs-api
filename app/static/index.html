@@ -71,6 +71,7 @@
         <button class="tab" data-tab="time">Hora</button>
         <button class="tab" data-tab="fw">Firmware</button>
         <button class="tab" data-tab="power">Reinicio</button>
+        <button class="tab" data-tab="backup">Respaldo</button>
         <button class="tab" data-tab="adv">Avanzado</button>
       </div>
 
@@ -149,6 +150,22 @@
         </label>
         <button data-action="fw">Enviar actualización</button>
         <p class="muted small">Los archivos se cargan desde el servidor (solo admin). El equipo descargará y aplicará el firmware.</p>
+      </div>
+
+      <div class="panel hidden" data-panel="backup">
+        <div class="sched-box">
+          <h3>Respaldo de configuración</h3>
+          <div id="backup-info" class="muted">—</div>
+          <div class="row" style="margin-top:.8rem">
+            <button data-action="backup-save">Guardar respaldo</button>
+            <button class="ghost" data-action="backup-restore">Restaurar ahora</button>
+          </div>
+        </div>
+        <div class="sched-box" style="border-bottom:0;margin-bottom:0;padding-bottom:0">
+          <h3>Auto-restauración</h3>
+          <label class="chk"><input type="checkbox" id="backup-auto"> Restaurar automáticamente si el equipo se resetea de fábrica</label>
+          <p class="muted small">Si está activo, el sistema vigila el equipo y, cuando detecta que volvió a los valores de fábrica (tras un reset), le vuelve a cargar la configuración guardada.</p>
+        </div>
       </div>
 
       <div class="panel wide hidden" data-panel="adv">

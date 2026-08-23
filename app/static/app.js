@@ -218,7 +218,42 @@ $$(".tab").forEach(t => t.addEventListener("click", () => {
   $$(".tab").forEach(x => x.classList.remove("active")); t.classList.add("active");
   $$(".panel").forEach(p => p.classList.toggle("hidden", p.dataset.panel !== t.dataset.tab));
   if (t.dataset.tab === "adv") loadParams();
+  if (t.dataset.tab === "backup") loadBackup();
 }));
+
+// ---- Respaldo / auto-restauración ----
+async function loadBackup() {
+  try {
+    const b = await api(`/devices/${enc(S.current)}/backup`);
+    $("#backup-auto").checked = !!b.autorestore;
+    if (b.exists) {
+      const n = Object.keys(b.params || {}).length;
+      $("#backup-info").textContent = `Respaldo guardado: ${n} parámetros · ${fmtDate(b.updated_at)}`;
+    } else {
+      $("#backup-info").textContent = "Aún no hay respaldo. Pulsa \"Guardar respaldo\".";
+    }
+  } catch (e) { toast(e.message, "err"); }
+}
+
+actions["backup-save"] = async function () {
+  toast("Leyendo y guardando configuración…", "info");
+  const r = await api(`/devices/${enc(S.current)}/backup`, { method: "POST" });
+  toast("✓ " + (r.detail || "Respaldo guardado"), "ok"); loadBackup();
+};
+actions["backup-restore"] = async function () {
+  if (!confirm("¿Restaurar la configuración guardada en el equipo?")) return;
+  const r = await api(`/devices/${enc(S.current)}/restore`, { method: "POST" });
+  if (r.ok === false) return toast(r.detail, "err");
+  report(r); refreshAfterChange(r);
+};
+
+$("#backup-auto").addEventListener("change", async () => {
+  try {
+    await api(`/devices/${enc(S.current)}/autorestore`, { method: "POST", body: { enabled: $("#backup-auto").checked } });
+    toast($("#backup-auto").checked ? "✓ Auto-restauración activada" : "Auto-restauración desactivada", "ok");
+    loadBackup();
+  } catch (e) { toast(e.message, "err"); $("#backup-auto").checked = !$("#backup-auto").checked; }
+});
 
 // ---- Avanzado: explorador de todo el árbol del modelo ----
 let advCache = [];

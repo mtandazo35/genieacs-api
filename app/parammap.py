@@ -54,6 +54,17 @@ TR098 = {
 }
 
 
+# Parametros de configuracion "restaurables" (se respaldan y se reaplican tras
+# un factory reset). Solo valores que definen como debe quedar el equipo.
+CONFIG_KEYS = [
+    "wifi_2g_ssid", "wifi_2g_password", "wifi_2g_enable", "wifi_2g_channel",
+    "wifi_5g_ssid", "wifi_5g_password", "wifi_5g_enable", "wifi_5g_channel",
+    "lan_ip", "lan_mask", "dhcp_enable", "dhcp_min", "dhcp_max", "dhcp_lease",
+    "lan_dns", "wan_dns", "wan_mode", "wan_ip", "wan_mask", "wan_gateway", "wan_mtu",
+    "pppoe_enable", "pppoe_user", "pppoe_password", "tz", "ntp1", "ntp2",
+]
+
+
 def pick_map(device: dict) -> dict:
     """Elige el mapa segun el modelo. Por ahora todo cae a TR098."""
     # Aqui, a futuro: mirar DeviceInfo.Manufacturer/ProductClass y devolver otro mapa.

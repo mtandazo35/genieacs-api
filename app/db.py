@@ -23,6 +23,12 @@ CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT
 );
+CREATE TABLE IF NOT EXISTS device_config (
+    device_id   TEXT PRIMARY KEY,
+    config      TEXT,                          -- JSON {path: [value, type]}
+    autorestore INTEGER NOT NULL DEFAULT 0,
+    updated_at  TEXT
+);
 """
 
 
@@ -83,6 +89,38 @@ def delete_user(username: str) -> None:
 def count_active_admins() -> int:
     with connect() as c:
         return c.execute("SELECT COUNT(*) AS n FROM users WHERE role='admin' AND active=1").fetchone()["n"]
+
+
+# ---- respaldo de configuracion por equipo ----
+def save_device_config(device_id: str, config_json: str) -> None:
+    with connect() as c:
+        c.execute(
+            "INSERT INTO device_config (device_id, config, updated_at) VALUES (?,?,datetime('now')) "
+            "ON CONFLICT(device_id) DO UPDATE SET config=excluded.config, updated_at=datetime('now')",
+            (device_id, config_json),
+        )
+
+
+def get_device_config(device_id: str) -> dict | None:
+    with connect() as c:
+        row = c.execute("SELECT * FROM device_config WHERE device_id=?", (device_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def set_autorestore(device_id: str, enabled: bool) -> None:
+    with connect() as c:
+        c.execute(
+            "INSERT INTO device_config (device_id, autorestore, updated_at) VALUES (?,?,datetime('now')) "
+            "ON CONFLICT(device_id) DO UPDATE SET autorestore=excluded.autorestore",
+            (device_id, 1 if enabled else 0),
+        )
+
+
+def list_autorestore() -> list[dict]:
+    with connect() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT device_id, config FROM device_config WHERE autorestore=1 AND config IS NOT NULL"
+        ).fetchall()]
 
 
 # ---- settings (clave/valor) ----
