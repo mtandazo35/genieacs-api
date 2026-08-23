@@ -42,6 +42,7 @@ TR098 = {
         "pppoe_enable": ("InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Enable", "xsd:boolean"),
         "pppoe_user": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username",
         "pppoe_password": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Password",
+        "pppoe_status": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.ConnectionStatus",
         # --- Hora / fecha ---
         "tz": "InternetGatewayDevice.Time.LocalTimeZone",
         "ntp1": "InternetGatewayDevice.Time.NTPServer1",

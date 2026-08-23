@@ -167,7 +167,9 @@ function pwCell(k, v) {
 }
 function onoff(v) { return v === true ? "Encendido" : v === false ? "Apagado" : "-"; }
 
+let lastStatus = null;
 function renderStatus(st) {
+  lastStatus = st;
   $("#dev-tags").innerHTML = visibleTags(st.tags).map(t => `<span class="tag">${esc(t)}</span>`).join("");
   const dhcp = (st.dhcp_min || st.dhcp_max) ? `${st.dhcp_min || "?"} – ${st.dhcp_max || "?"}` : null;
   const sections = [
@@ -180,7 +182,9 @@ function renderStatus(st) {
     ["Internet (WAN)", [
       cell("Tipo", st.wan_mode),
       cell("IP WAN", st.wan_ip), cell("Gateway", st.wan_gateway),
-      cell("PPPoE", st.pppoe_enable ? "activo (" + (st.pppoe_user || "").trim() + ")" : "inactivo"),
+      cell("PPPoE", st.pppoe_enable
+        ? `${(st.pppoe_user || "").trim()} — ${st.pppoe_status === "Connected" ? "conectado" : "configurado (sin conexión)"}`
+        : "inactivo"),
     ]],
     ["Red local (LAN)", [
       cell("IP del router", st.lan_ip), cell("Rango DHCP", dhcp),
@@ -231,6 +235,7 @@ async function loadWan() {
     if (!r.count) { box.innerHTML = ""; return; }
     box.innerHTML = `<div class="wan-head">${r.count} conexión(es) WAN en el equipo:</div>` +
       r.connections.map(c => `<div class="wan-row">${c.active ? "🟢" : "⚪"} <b>${esc(c.instance)}</b> — ${esc(c.type || "?")} · ${esc(c.status || "?")}${c.ip ? " · " + esc(c.ip) : ""}${c.active ? ' <span class="wan-active">activa</span>' : ""}</div>`).join("");
+    prefillWanForm();
   } catch (e) { /* silencioso */ }
 }
 
@@ -365,10 +370,25 @@ async function advRefresh() {
 }
 
 
-// mostrar campos estáticos solo en modo estático
+// mostrar campos segun el modo WAN elegido
 $("#wan-mode").addEventListener("change", () => {
-  $("#wan-static").classList.toggle("hidden", $("#wan-mode").value !== "static");
+  const m = $("#wan-mode").value;
+  $("#wan-static").classList.toggle("hidden", m !== "static");
+  $("#wan-pppoe").classList.toggle("hidden", m !== "pppoe");
 });
+
+// prellenar el formulario WAN con lo que tiene el equipo (modo + usuario/clave PPPoE)
+function prefillWanForm() {
+  const st = lastStatus; if (!st) return;
+  let m = "dhcp";
+  if (st.pppoe_enable) m = "pppoe";
+  else if ((st.wan_mode || "").toLowerCase().startsWith("static")) m = "static";
+  $("#wan-mode").value = m;
+  $("#wan-static").classList.toggle("hidden", m !== "static");
+  $("#wan-pppoe").classList.toggle("hidden", m !== "pppoe");
+  $("#wanppp-user").value = (st.pppoe_user || "").trim();
+  $("#wanppp-pass").value = (st.pppoe_password || "").trim();
+}
 
 $$("[data-back]").forEach(b => b.addEventListener("click", () => {
   $("#device-page").classList.add("hidden"); $("#devices-page").classList.remove("hidden");
@@ -421,6 +441,7 @@ const actions = {
   async wan() {
     const mode = $("#wan-mode").value;
     const body = { mode };
+    let aviso = "¿Aplicar WAN por DHCP?";
     if (mode === "static") {
       body.ip = $("#wan-ip").value.trim();
       body.mask = $("#wan-mask").value.trim();
@@ -429,10 +450,13 @@ const actions = {
       if (dns.length) body.dns = dns;
       if ($("#wan-mtu").value) body.mtu = +$("#wan-mtu").value;
       if (!body.ip || !body.mask || !body.gateway) return toast("IP, máscara y gateway son obligatorios en estático", "err");
+      aviso = "⚠ VAS A PONER IP ESTÁTICA EN LA WAN.\n\nLa IP debe ser de la MISMA red por la que el equipo llega al ACS, o perderás la gestión remota.\n\n¿Continuar?";
+    } else if (mode === "pppoe") {
+      body.username = $("#wanppp-user").value.trim();
+      body.password = $("#wanppp-pass").value;
+      if (!body.username) return toast("Usuario PPPoE requerido", "err");
+      aviso = "¿Aplicar WAN por PPPoE con el usuario " + body.username + "?";
     }
-    const aviso = mode === "static"
-      ? "⚠ VAS A PONER IP ESTÁTICA EN LA WAN.\n\nLa IP debe ser de la MISMA red por la que el equipo llega al ACS, o perderás la gestión remota y habrá que ir al sitio.\n\n¿Continuar?"
-      : "¿Aplicar WAN por DHCP?";
     if (!confirm(aviso)) return;
     const r = await api(`/devices/${enc(S.current)}/wan`, { method: "PUT", body });
     report(r);

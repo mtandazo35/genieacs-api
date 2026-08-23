@@ -83,6 +83,20 @@ async def set_wan(device_id: str, body: WanIn, dev=Depends(authorized_device)):
     OJO: cambiar mal la WAN puede dejar al equipo sin internet y sin contacto
     con el ACS. En estatico se exigen ip, mascara y gateway."""
     from .devices import active_wan_prefix
+    # --- PPPoE: se configura sobre WANPPPConnection.1 ---
+    if body.mode == "pppoe":
+        if not body.username:
+            raise HTTPException(400, "PPPoE requiere usuario")
+        ppp = "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1"
+        values = [[f"{ppp}.Enable", True, "xsd:boolean"],
+                  [f"{ppp}.Username", body.username, "xsd:string"]]
+        if body.password:
+            values.append([f"{ppp}.Password", body.password, "xsd:string"])
+        res = await genie.set_parameter_values(device_id, values)
+        merge_device_config(device_id, values)
+        return ActionResult(applied=res["applied"], queued=res["queued"],
+                            detail="WAN PPPoE configurada (se conecta si hay servidor PPPoE)")
+
     prefix = await active_wan_prefix(device_id)
     if body.mode == "dhcp":
         values = [[f"{prefix}.AddressingType", "DHCP", "xsd:string"]]

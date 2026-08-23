@@ -40,12 +40,14 @@ class PppoeIn(BaseModel):
 
 
 class WanIn(BaseModel):
-    mode: str = Field(..., pattern="^(dhcp|static)$", description="dhcp o static")
+    mode: str = Field(..., pattern="^(dhcp|static|pppoe)$", description="dhcp, static o pppoe")
     ip: Optional[str] = None
     mask: Optional[str] = None
     gateway: Optional[str] = None
     dns: Optional[list[str]] = Field(None, max_length=4)
     mtu: Optional[int] = Field(None, ge=576, le=1500)
+    username: Optional[str] = None   # PPPoE
+    password: Optional[str] = None   # PPPoE
 
 
 class DnsIn(BaseModel):

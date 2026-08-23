@@ -68,7 +68,6 @@
         <button class="tab" data-tab="net">Red / IP</button>
         <button class="tab" data-tab="wan">WAN</button>
         <button class="tab" data-tab="ipv6">IPv6</button>
-        <button class="tab" data-tab="pppoe">PPPoE</button>
         <button class="tab" data-tab="dns">DNS</button>
         <button class="tab" data-tab="time">Hora</button>
         <button class="tab" data-tab="fw">Firmware</button>
@@ -111,8 +110,12 @@
         <button type="button" id="wan-refresh" class="ghost small" style="margin-bottom:.8rem">↻ Actualizar desde el equipo</button>
         <div id="wan-list" class="wan-list"></div>
         <label>Tipo de conexión WAN
-          <select id="wan-mode"><option value="dhcp">DHCP (automática)</option><option value="static">IP estática</option></select>
+          <select id="wan-mode"><option value="dhcp">DHCP (automática)</option><option value="static">IP estática</option><option value="pppoe">PPPoE</option></select>
         </label>
+        <div id="wan-pppoe" class="hidden">
+          <label>Usuario PPPoE<input id="wanppp-user"></label>
+          <label>Contraseña PPPoE<input id="wanppp-pass" placeholder="(si el equipo no la entrega, escríbela para cambiarla)"></label>
+        </div>
         <div id="wan-static" class="hidden">
           <label>IP WAN<input id="wan-ip" placeholder="p.ej. 190.0.0.2"></label>
           <label>Máscara<input id="wan-mask" placeholder="255.255.255.0"></label>
@@ -131,12 +134,6 @@
         <div id="ipv6-list" class="adv-list"></div>
       </div>
 
-      <div class="panel hidden" data-panel="pppoe">
-        <label class="chk"><input type="checkbox" id="ppp-enable" checked> Activar PPPoE</label>
-        <label>Usuario PPPoE<input id="ppp-user"></label>
-        <label>Contraseña PPPoE<input id="ppp-pass"></label>
-        <button data-action="pppoe">Aplicar PPPoE</button>
-      </div>
 
       <div class="panel hidden" data-panel="dns">
         <div class="row">
