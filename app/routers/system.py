@@ -10,10 +10,10 @@ Reinicios programados = provision en GenieACS (decision de diseno):
 """
 import re
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends
 
 from ..config import get_settings
-from ..deps import authorized_device, current_user, require_admin
+from ..deps import authorized_device, require_admin
 from ..genieacs import genie
 from ..schemas import ActionResult, FirmwarefromServer, ScheduleRebootIn
 
@@ -119,25 +119,7 @@ async def clear_schedule(device_id: str, dev=Depends(authorized_device)):
     return {"ok": True, "removed": removed}
 
 
-# --- firmware / actualizaciones ------------------------------------------
-@router.get("/firmware")
-async def list_firmware(user=Depends(current_user)):
-    return await genie.list_files()
-
-
-@router.post("/firmware/upload", dependencies=[Depends(require_admin)])
-async def upload_firmware(
-    file: UploadFile = File(...),
-    product_class: str = Form(""),
-    oui: str = Form(""),
-    version: str = Form(""),
-):
-    content = await file.read()
-    await genie.upload_file(file.filename, content, "1 Firmware Upgrade Image",
-                            oui=oui, product_class=product_class, version=version)
-    return {"ok": True, "file_name": file.filename, "size": len(content)}
-
-
+# --- firmware: envio individual (1 a 1). Gestion/masivo en routers/firmware.py
 @router.post("/devices/{device_id}/firmware", response_model=ActionResult)
 async def push_firmware(device_id: str, body: FirmwarefromServer, dev=Depends(authorized_device)):
     res = await genie.download(device_id, body.file_name)

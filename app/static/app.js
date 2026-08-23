@@ -69,9 +69,11 @@ $$("[data-nav]").forEach(a => a.addEventListener("click", (e) => {
   $("#device-page").classList.add("hidden");
   $("#users-page").classList.toggle("hidden", nav !== "users");
   $("#settings-page").classList.toggle("hidden", nav !== "settings");
+  $("#updates-page").classList.toggle("hidden", nav !== "updates");
   if (nav === "devices") loadDevices();
   if (nav === "users") loadUsers();
   if (nav === "settings") loadSettings();
+  if (nav === "updates") loadUpdates();
 }));
 
 // ===== Equipos: lista =====
@@ -101,6 +103,16 @@ function renderDevices() {
 
 $("#filter").addEventListener("input", renderDevices);
 $("#refresh-list").addEventListener("click", loadDevices);
+
+// lectura masiva (dentro del alcance del usuario)
+$("#read-all").addEventListener("click", async () => {
+  const b = $("#read-all"); b.disabled = true; const p = b.textContent; b.textContent = "Encolando…";
+  try {
+    const r = await api("/devices/read-bulk", { method: "POST", body: { all: true } });
+    toast(`✓ ${r.detail || ("Lectura encolada en " + r.sent + " equipo(s)")}`, "ok");
+  } catch (e) { toast(e.message, "err"); }
+  finally { b.disabled = false; b.textContent = p; }
+});
 
 // ===== Equipos: detalle =====
 async function openDevice(id) {
@@ -367,6 +379,97 @@ $("#settings-form").addEventListener("submit", async (e) => {
   } catch (err) { toast(err.message, "err"); }
 });
 
+// ===== Actualizaciones / firmware (admin) =====
+async function loadUpdates() {
+  try {
+    const files = await api("/firmware");
+    // tabla de firmwares
+    $("#fw-table tbody").innerHTML = files.length
+      ? files.map(f => {
+          const name = f._id || f.filename || f.name;
+          return `<tr><td>${esc(name)}</td><td>${esc((f.metadata && f.metadata.fileType) || f.fileType || "-")}</td>
+            <td><button class="ghost small" data-fwdel="${escAttr(name)}">Borrar</button></td></tr>`;
+        }).join("")
+      : `<tr><td colspan="3" class="muted">No hay firmwares cargados.</td></tr>`;
+    // selector del envío masivo
+    $("#fwp-file").innerHTML = files.length
+      ? files.map(f => { const n = f._id || f.filename || f.name; return `<option value="${escAttr(n)}">${esc(n)}</option>`; }).join("")
+      : `<option value="">(sube un firmware primero)</option>`;
+  } catch (e) { toast(e.message, "err"); }
+}
+
+// subir por archivo
+$("#fw-upload-file").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = $("#fwu-file").files[0];
+  if (!f) return toast("Elige un archivo", "err");
+  const fd = new FormData();
+  fd.append("file", f);
+  fd.append("product_class", $("#fwu-model").value.trim());
+  fd.append("version", $("#fwu-version").value.trim());
+  fd.append("oui", $("#fwu-oui").value.trim());
+  try {
+    const r = await api("/firmware/upload", { method: "POST", form: fd });
+    toast(`✓ Subido: ${r.file_name} (${(r.size/1024/1024).toFixed(1)} MB)`, "ok");
+    $("#fw-upload-file").reset(); loadUpdates();
+  } catch (err) { toast(err.message, "err"); }
+});
+
+// subir por URL
+$("#fw-upload-url").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const body = {
+    url: $("#fwurl-url").value.trim(),
+    file_name: $("#fwurl-name").value.trim() || null,
+    product_class: $("#fwurl-model").value.trim(),
+    version: $("#fwurl-version").value.trim(),
+  };
+  toast("Descargando desde el URL…", "info");
+  try {
+    const r = await api("/firmware/upload-url", { method: "POST", body });
+    toast(`✓ Guardado: ${r.file_name} (${(r.size/1024/1024).toFixed(1)} MB)`, "ok");
+    $("#fw-upload-url").reset(); loadUpdates();
+  } catch (err) { toast(err.message, "err"); }
+});
+
+// borrar firmware
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-fwdel]");
+  if (!b) return;
+  const name = b.dataset.fwdel;
+  if (!confirm("¿Borrar el firmware " + name + "?")) return;
+  try { await api(`/firmware/${encodeURIComponent(name)}`, { method: "DELETE" }); toast("Borrado", "ok"); loadUpdates(); }
+  catch (err) { toast(err.message, "err"); }
+});
+
+// mostrar/ocultar el campo de valor según destino
+$("#fwp-target").addEventListener("change", () => {
+  const v = $("#fwp-target").value;
+  $("#fwp-value-wrap").classList.toggle("hidden", v === "all");
+  $("#fwp-value").placeholder = v === "tag" ? "tag del ISP (p.ej. altala)" : "modelo (p.ej. WR3000 V1.0)";
+});
+
+// enviar masivo
+$("#fw-push").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const file = $("#fwp-file").value;
+  if (!file) return toast("No hay firmware seleccionado", "err");
+  const target = $("#fwp-target").value;
+  const val = $("#fwp-value").value.trim();
+  if (target !== "all" && !val) return toast("Indica el valor del filtro", "err");
+  const body = { file_name: file };
+  if (target === "all") body.all = true;
+  if (target === "tag") body.tag = val;
+  if (target === "model") body.model = val;
+  if (!confirm("¿Enviar " + file + " a los equipos seleccionados?")) return;
+  const el = $("#fwp-result"); el.textContent = "Enviando…"; el.style.color = "var(--muted)";
+  try {
+    const r = await api("/firmware/push", { method: "POST", body });
+    el.textContent = `✓ ${r.detail} (fallidos: ${r.failed || 0})`; el.style.color = "var(--ok)";
+    toast("✓ Actualización enviada a " + r.sent + " equipo(s)", "ok");
+  } catch (err) { el.textContent = "✗ " + err.message; el.style.color = "var(--err)"; }
+});
+
 // ===== Utilidades de formato =====
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function escAttr(s) { return esc(s); }
@@ -385,6 +488,7 @@ async function boot() {
   } catch { S.role = S.role || "isp"; }
   $("#nav-users").classList.toggle("hidden", S.role !== "admin");
   $("#nav-settings").classList.toggle("hidden", S.role !== "admin");
+  $("#nav-updates").classList.toggle("hidden", S.role !== "admin");
   $("#who").textContent = S.isp ? `ISP: ${S.isp}` : (S.role === "admin" ? "Administrador" : "");
   loadDevices();
 }

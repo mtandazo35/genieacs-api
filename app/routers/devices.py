@@ -1,11 +1,21 @@
 """Listado y estado de dispositivos (filtrado por ISP)."""
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
+from typing import Optional
 
+from ..bulk import resolve_targets
 from ..deps import CurrentUser, authorized_device, current_user, tenant_query
 from ..genieacs import genie
 from ..parammap import pick_map, resolve
 
 router = APIRouter(prefix="/devices", tags=["devices"])
+
+
+class BulkReadIn(BaseModel):
+    tag: Optional[str] = None
+    model: Optional[str] = None
+    device_ids: Optional[list[str]] = None
+    all: bool = False
 
 _STATUS_KEYS = [
     "firmware", "uptime", "cpu", "wan_ip", "pppoe_enable", "pppoe_user",
@@ -90,3 +100,27 @@ async def read_status(device_id: str, dev=Depends(authorized_device)):
             names.append(r[0])
     res = await genie.get_parameter_values(device_id, names)
     return {"ok": True, **res}
+
+
+@router.post("/read-bulk")
+async def read_status_bulk(body: BulkReadIn, user: CurrentUser = Depends(current_user)):
+    """Lectura masiva: pide los datos de estado a varios equipos a la vez.
+
+    Encola la lectura (se resuelve en el proximo reporte de cada equipo) para no
+    lanzar N connection requests sincronos. Respeta la tenencia (ISP = su tag)."""
+    targets = await resolve_targets(user, tag=body.tag, model=body.model, device_ids=body.device_ids)
+    if not targets:
+        return {"ok": True, "sent": 0, "detail": "Ningun equipo coincide"}
+    # nombres de estado a partir del primer equipo (mismo mapa para todos por ahora)
+    sample = await genie.get_device(targets[0], ["_deviceId"])
+    pmap = pick_map(sample or {})
+    names = [resolve(pmap, k)[0] for k in _STATUS_KEYS if resolve(pmap, k)]
+    ok, fail = 0, 0
+    for dev_id in targets:
+        try:
+            await genie.get_parameter_values(dev_id, names, connection_request=False)
+            ok += 1
+        except Exception:
+            fail += 1
+    return {"ok": True, "sent": ok, "failed": fail,
+            "detail": f"Lectura encolada en {ok} equipo(s); se actualiza en su proximo reporte."}

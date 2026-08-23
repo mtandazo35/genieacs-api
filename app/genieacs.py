@@ -161,6 +161,12 @@ class GenieACS:
             raise GenieACSError(r.status_code, r.text)
         return r.json()
 
+    async def delete_file(self, file_name: str) -> None:
+        async with await self._client() as c:
+            r = await c.delete(f"/files/{quote(file_name, safe='')}")
+        if r.status_code not in (200, 204):
+            raise GenieACSError(r.status_code, r.text)
+
     # ---- provisions / presets -------------------------------------------
     async def put_provision(self, name: str, script: str) -> None:
         async with await self._client() as c:
