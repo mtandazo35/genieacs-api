@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from ..deps import authorized_device
 from ..genieacs import genie
 from ..parammap import pick_map, resolve
-from ..schemas import ActionResult, DnsIn, IpIn, PppoeIn, TimeIn, WanIn, WifiIn
+from ..schemas import AccessIn, ActionResult, DnsIn, IpIn, PppoeIn, TimeIn, WanIn, WifiIn
 from .backup import merge_device_config
 
 router = APIRouter(prefix="/devices/{device_id}", tags=["config"])
@@ -161,6 +161,22 @@ async def set_pppoe(device_id: str, body: PppoeIn, dev=Depends(authorized_device
         ("pppoe_user", body.username),
         ("pppoe_password", body.password),
     ]
+    return await _apply(device_id, pmap, pairs)
+
+
+@router.put("/access", response_model=ActionResult)
+async def set_access(device_id: str, body: AccessIn, dev=Depends(authorized_device)):
+    """Acceso remoto (WAN) y usuario/clave admin del equipo."""
+    pmap = pick_map(dev)
+    pairs = [
+        ("remote_enable", body.remote_enable),
+        ("remote_port", body.remote_port),
+        ("admin_user", body.admin_user),
+        ("admin_password", body.admin_password),
+    ]
+    # al fijar clave admin, habilitar la cuenta si el modelo lo requiere
+    if body.admin_password and resolve(pmap, "admin_enable"):
+        pairs.append(("admin_enable", True))
     return await _apply(device_id, pmap, pairs)
 
 

@@ -81,6 +81,7 @@
         <button class="tab" data-tab="wan">WAN</button>
         <button class="tab" data-tab="ipv6">IPv6</button>
         <button class="tab" data-tab="dns">DNS</button>
+        <button class="tab" data-tab="access">Acceso</button>
         <button class="tab" data-tab="time">Hora</button>
         <button class="tab" data-tab="fw">Firmware</button>
         <button class="tab" data-tab="clients">Clientes</button>
@@ -158,6 +159,19 @@
         </div>
         <label>Servidores DNS (uno por línea, máx. 4)<textarea id="dns-servers" rows="4" placeholder="8.8.8.8&#10;1.1.1.1"></textarea></label>
         <button data-action="dns">Aplicar DNS</button>
+      </div>
+
+      <div class="panel hidden" data-panel="access">
+        <h3 style="margin-top:0">Acceso remoto (WAN)</h3>
+        <div class="row">
+          <label class="chk"><input type="checkbox" id="acc-remote"> Permitir administración por WAN</label>
+          <label>Puerto<input id="acc-remoteport" type="number" min="1" max="65535" placeholder="p.ej. 8080 / 443"></label>
+        </div>
+        <h3>Usuario administrador del equipo</h3>
+        <label>Usuario<input id="acc-user" placeholder="admin"></label>
+        <label>Nueva clave<input id="acc-pass" placeholder="dejar vacío = no cambiar"></label>
+        <button data-action="access">Aplicar acceso</button>
+        <p class="muted small">⚠ Activar acceso por WAN expone la administración del equipo a Internet. El cambio de clave admin depende del modelo (algunos no lo exponen por TR-069).</p>
       </div>
 
       <div class="panel hidden" data-panel="time">

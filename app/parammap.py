@@ -49,6 +49,9 @@ TR098 = {
         "tz": "InternetGatewayDevice.Time.LocalTimeZone",
         "ntp1": "InternetGatewayDevice.Time.NTPServer1",
         "ntp2": "InternetGatewayDevice.Time.NTPServer2",
+        # --- Acceso remoto (WAN) ---
+        "remote_enable": ("InternetGatewayDevice.UserInterface.RemoteAccess.Enable", "xsd:boolean"),
+        "remote_port": ("InternetGatewayDevice.UserInterface.RemoteAccess.Port", "xsd:unsignedInt"),
         # --- Solo lectura utiles para status ---
         "uptime": "InternetGatewayDevice.DeviceInfo.UpTime",
         "firmware": "InternetGatewayDevice.DeviceInfo.SoftwareVersion",
@@ -98,6 +101,12 @@ TR181 = {
         "firmware": "Device.DeviceInfo.SoftwareVersion",
         "cpu": "Device.DeviceInfo.ProcessStatus.CPUUsage",
         "mac": "Device.Ethernet.Interface.2.MACAddress",
+        # --- Acceso remoto (WAN) y usuario admin del equipo ---
+        "remote_enable": ("Device.UserInterface.RemoteAccess.Enable", "xsd:boolean"),
+        "remote_port": ("Device.UserInterface.RemoteAccess.Port", "xsd:unsignedInt"),
+        "admin_user": "Device.Users.User.1.Username",
+        "admin_password": "Device.Users.User.1.Password",
+        "admin_enable": ("Device.Users.User.1.Enable", "xsd:boolean"),
     },
 }
 

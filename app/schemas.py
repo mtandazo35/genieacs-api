@@ -39,6 +39,13 @@ class PppoeIn(BaseModel):
     password: Optional[str] = None
 
 
+class AccessIn(BaseModel):
+    remote_enable: Optional[bool] = None    # acceso remoto por WAN
+    remote_port: Optional[int] = Field(None, ge=1, le=65535)
+    admin_user: Optional[str] = None        # usuario admin del equipo
+    admin_password: Optional[str] = None     # nueva clave admin del equipo
+
+
 class WanIn(BaseModel):
     mode: str = Field(..., pattern="^(dhcp|static|pppoe)$", description="dhcp, static o pppoe")
     ip: Optional[str] = None

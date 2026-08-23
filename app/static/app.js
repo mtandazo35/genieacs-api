@@ -259,6 +259,11 @@ $$(".tab").forEach(t => t.addEventListener("click", () => {
   if (t.dataset.tab === "wan") loadWan();
   if (t.dataset.tab === "clients") loadClients();
   if (t.dataset.tab === "history") loadDeviceAudit();
+  if (t.dataset.tab === "access" && lastStatus) {
+    $("#acc-remote").checked = lastStatus.remote_enable === true;
+    $("#acc-remoteport").value = lastStatus.remote_port || "";
+    $("#acc-user").value = (lastStatus.admin_user || "").trim();
+  }
 }));
 
 // etiqueta legible de una acción del log
@@ -583,6 +588,17 @@ const actions = {
     const r = await api(`/devices/${enc(S.current)}/pppoe`, { method: "PUT", body });
     report(r); refreshAfterChange(r);
     clearInputs("ppp-user", "ppp-pass");
+  },
+  async access() {
+    const body = {};
+    body.remote_enable = $("#acc-remote").checked;
+    if ($("#acc-remoteport").value) body.remote_port = +$("#acc-remoteport").value;
+    if ($("#acc-user").value.trim()) body.admin_user = $("#acc-user").value.trim();
+    if ($("#acc-pass").value) body.admin_password = $("#acc-pass").value;
+    if (body.remote_enable && !confirm("Vas a permitir la administración del equipo por WAN (Internet). ¿Continuar?")) return;
+    const r = await api(`/devices/${enc(S.current)}/access`, { method: "PUT", body });
+    report(r); refreshAfterChange(r);
+    clearInputs("acc-pass");
   },
   async dns() {
     const servers = $("#dns-servers").value.split(/\s+/).map(s => s.trim()).filter(Boolean);
