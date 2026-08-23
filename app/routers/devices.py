@@ -116,20 +116,30 @@ async def _active_wan(device_id: str):
                 return v
         return None
 
-    # la instancia activa a veces no trae IP/gateway: usar la de cualquier instancia que si la tenga
+    # la instancia activa a veces no trae IP/gateway/MAC: usar la de otra instancia que si la tenga
     ip_fallback = first_nonempty(ipconns, "ExternalIPAddress")
     gw_fallback = first_nonempty(ipconns, "DefaultGateway")
+
+    def mac_of(inst):
+        m = _val(inst, "MACAddress")
+        if m and m not in ("00:00:00:00:00:00",):
+            return m
+        for c in ipconns + pppconns:   # buscar una MAC valida en cualquier conexion
+            v = _val(c, "MACAddress")
+            if v and v != "00:00:00:00:00:00":
+                return v
+        return None
 
     for inst in pppconns:
         if _val(inst, "ConnectionStatus") in ("Connected", "Up"):
             return {"mode": "PPPoE", "ip": _val(inst, "ExternalIPAddress") or ip_fallback,
                     "gw": _val(inst, "DefaultGateway") or gw_fallback,
-                    "ppp_user": _val(inst, "Username"), "ppp": True}
+                    "ppp_user": _val(inst, "Username"), "ppp": True, "mac": mac_of(inst)}
     for inst in ipconns:
         if _val(inst, "ConnectionStatus") in ("Connected", "Up"):
             return {"mode": _val(inst, "AddressingType"),
                     "ip": _val(inst, "ExternalIPAddress") or ip_fallback,
-                    "gw": _val(inst, "DefaultGateway") or gw_fallback, "ppp": False}
+                    "gw": _val(inst, "DefaultGateway") or gw_fallback, "ppp": False, "mac": mac_of(inst)}
     return None
 
 
@@ -208,6 +218,8 @@ async def device_status(device_id: str, dev=Depends(authorized_device)):
             result["wan_mode"] = aw["mode"]
             result["wan_ip"] = aw["ip"]
             result["wan_gateway"] = aw["gw"]
+            if aw.get("mac"):
+                result["mac"] = aw["mac"]   # MAC WAN real (la de la conexion activa)
             if aw.get("ppp"):
                 result["pppoe_enable"] = True
                 if aw.get("ppp_user"):
