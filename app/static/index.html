@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GenieACS · Panel</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ===== LOGIN ===== -->
+<div id="login-view" class="login-wrap hidden">
+  <form id="login-form" class="login-card">
+    <h1>GenieACS <span>Panel</span></h1>
+    <p class="muted">Gestión de equipos</p>
+    <label>Usuario<input id="login-user" autocomplete="username" required></label>
+    <label>Contraseña<input id="login-pass" type="password" autocomplete="current-password" required></label>
+    <button type="submit" id="login-btn">Ingresar</button>
+    <div id="login-error" class="error hidden"></div>
+  </form>
+</div>
+
+<!-- ===== APP ===== -->
+<div id="app-view" class="hidden">
+  <header class="topbar">
+    <div class="brand">GenieACS <span>Panel</span></div>
+    <nav>
+      <a href="#" data-nav="devices" class="active">Equipos</a>
+      <a href="#" data-nav="users" id="nav-users" class="hidden">Usuarios</a>
+    </nav>
+    <div class="user-box">
+      <span id="who" class="muted"></span>
+      <button id="logout" class="ghost">Salir</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Lista de equipos -->
+    <section id="devices-page">
+      <div class="page-head">
+        <h2>Equipos</h2>
+        <button id="refresh-list" class="ghost">↻ Actualizar</button>
+      </div>
+      <input id="filter" class="filter" placeholder="Filtrar por modelo, ID o tag…">
+      <div id="device-list" class="grid"></div>
+      <div id="device-empty" class="muted hidden">No hay equipos visibles para tu usuario.</div>
+    </section>
+
+    <!-- Detalle de un equipo -->
+    <section id="device-page" class="hidden">
+      <button class="ghost back" data-back>← Volver</button>
+      <div class="dev-header">
+        <h2 id="dev-title"></h2>
+        <span id="dev-tags" class="tags"></span>
+      </div>
+      <div id="dev-status" class="status-grid"></div>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="wifi">WiFi</button>
+        <button class="tab" data-tab="net">Red / IP</button>
+        <button class="tab" data-tab="pppoe">PPPoE</button>
+        <button class="tab" data-tab="dns">DNS</button>
+        <button class="tab" data-tab="time">Hora</button>
+        <button class="tab" data-tab="fw">Firmware</button>
+        <button class="tab" data-tab="power">Reinicio</button>
+      </div>
+
+      <div class="panel" data-panel="wifi">
+        <div class="row">
+          <label>Banda
+            <select id="wifi-band"><option value="2g">2.4 GHz</option><option value="5g">5 GHz</option></select>
+          </label>
+        </div>
+        <label>Nombre de red (SSID)<input id="wifi-ssid" placeholder="Dejar vacío = no cambiar"></label>
+        <label>Contraseña WiFi<input id="wifi-pass" placeholder="Mín. 8 caracteres (vacío = no cambiar)"></label>
+        <div class="row">
+          <label>Canal<input id="wifi-channel" type="number" min="0" max="196" placeholder="opcional"></label>
+          <label class="chk"><input type="checkbox" id="wifi-enable" checked> Radio encendido</label>
+          <label class="chk"><input type="checkbox" id="wifi-hidden"> Ocultar red</label>
+        </div>
+        <button data-action="wifi">Aplicar WiFi</button>
+      </div>
+
+      <div class="panel hidden" data-panel="net">
+        <label>IP del router (LAN)<input id="net-ip" placeholder="192.168.10.1"></label>
+        <label>Máscara<input id="net-mask" placeholder="255.255.255.0"></label>
+        <div class="row">
+          <label>DHCP desde<input id="net-min" placeholder="192.168.10.10"></label>
+          <label>DHCP hasta<input id="net-max" placeholder="192.168.10.250"></label>
+        </div>
+        <div class="row">
+          <label class="chk"><input type="checkbox" id="net-dhcp" checked> Servidor DHCP activo</label>
+          <label>Lease (s)<input id="net-lease" type="number" min="60" placeholder="7200"></label>
+        </div>
+        <button data-action="net">Aplicar Red</button>
+      </div>
+
+      <div class="panel hidden" data-panel="pppoe">
+        <label class="chk"><input type="checkbox" id="ppp-enable" checked> Activar PPPoE</label>
+        <label>Usuario PPPoE<input id="ppp-user"></label>
+        <label>Contraseña PPPoE<input id="ppp-pass"></label>
+        <button data-action="pppoe">Aplicar PPPoE</button>
+      </div>
+
+      <div class="panel hidden" data-panel="dns">
+        <div class="row">
+          <label>Ámbito
+            <select id="dns-scope"><option value="lan">DNS por DHCP (clientes)</option><option value="wan">DNS del enlace (WAN)</option></select>
+          </label>
+        </div>
+        <label>Servidores DNS (uno por línea, máx. 4)<textarea id="dns-servers" rows="4" placeholder="8.8.8.8&#10;1.1.1.1"></textarea></label>
+        <button data-action="dns">Aplicar DNS</button>
+      </div>
+
+      <div class="panel hidden" data-panel="time">
+        <label>Zona horaria<input id="time-tz" placeholder="p.ej. GMT-5"></label>
+        <label>NTP 1<input id="time-ntp1" placeholder="pool.ntp.org"></label>
+        <label>NTP 2<input id="time-ntp2"></label>
+        <button data-action="time">Aplicar Hora</button>
+      </div>
+
+      <div class="panel hidden" data-panel="fw">
+        <label>Firmware disponible en el servidor
+          <select id="fw-file"></select>
+        </label>
+        <button data-action="fw">Enviar actualización</button>
+        <p class="muted small">Los archivos se cargan desde el servidor (solo admin). El equipo descargará y aplicará el firmware.</p>
+      </div>
+
+      <div class="panel hidden" data-panel="power">
+        <div class="danger-box">
+          <h3>Reinicio inmediato</h3>
+          <button class="warn" data-action="reboot">Reiniciar ahora</button>
+        </div>
+        <div class="sched-box">
+          <h3>Reinicio programado (diario)</h3>
+          <div id="sched-current" class="muted"></div>
+          <div class="row">
+            <label>Hora<input id="sched-hour" type="number" min="0" max="23" placeholder="3"></label>
+            <label>Minuto<input id="sched-min" type="number" min="0" max="59" placeholder="0"></label>
+          </div>
+          <div class="row">
+            <button data-action="sched-set">Programar</button>
+            <button class="ghost" data-action="sched-clear">Quitar</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Usuarios (solo admin) -->
+    <section id="users-page" class="hidden">
+      <div class="page-head"><h2>Usuarios</h2></div>
+      <form id="user-form" class="card-form">
+        <div class="row">
+          <label>Usuario<input id="u-name" required></label>
+          <label>Contraseña<input id="u-pass" type="password" required></label>
+        </div>
+        <div class="row">
+          <label>Rol
+            <select id="u-role"><option value="isp">ISP</option><option value="admin">Admin</option></select>
+          </label>
+          <label>Tag del ISP<input id="u-tag" placeholder="p.ej. altala (obligatorio si rol=ISP)"></label>
+        </div>
+        <button type="submit">Crear usuario</button>
+      </form>
+      <table class="tbl" id="users-table"><thead><tr><th>#</th><th>Usuario</th><th>Rol</th><th>ISP</th><th>Activo</th></tr></thead><tbody></tbody></table>
+    </section>
+  </main>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+<script src="app.js"></script>
+</body>
+</html>
