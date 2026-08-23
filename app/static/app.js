@@ -219,6 +219,7 @@ $$(".tab").forEach(t => t.addEventListener("click", () => {
   $$(".panel").forEach(p => p.classList.toggle("hidden", p.dataset.panel !== t.dataset.tab));
   if (t.dataset.tab === "adv") loadParams();
   if (t.dataset.tab === "backup") loadBackup();
+  if (t.dataset.tab === "ipv6") loadIPv6();
 }));
 
 // ---- Respaldo / auto-restauración ----
@@ -264,6 +265,17 @@ async function loadParams() {
     renderParams();
   } catch (e) { toast(e.message, "err"); }
 }
+// fila de parámetro reutilizable (Avanzado e IPv6). Los editables llevan data-ppath/data-ptype
+function paramRow(p) {
+  const val = p.value == null ? "" : String(p.value);
+  if (p.writable) {
+    return `<div class="adv-row"><div class="adv-path">${esc(p.path)}<span class="w">✎</span></div>
+      <div class="adv-edit"><input value="${escAttr(val)}" data-ppath="${escAttr(p.path)}" data-ptype="${escAttr(p.type || '')}">
+      <button class="ghost small" data-psave>Guardar</button></div></div>`;
+  }
+  return `<div class="adv-row"><div class="adv-path">${esc(p.path)}</div><div class="adv-val">${esc(val || "-")}</div></div>`;
+}
+
 function renderParams() {
   const q = $("#adv-search").value.toLowerCase();
   const wo = $("#adv-writable").checked;
@@ -271,17 +283,42 @@ function renderParams() {
   if (wo) items = items.filter(p => p.writable);
   if (q) items = items.filter(p => p.path.toLowerCase().includes(q) || (p.value != null && String(p.value).toLowerCase().includes(q)));
   $("#adv-count").textContent = `${items.length} de ${advCache.length} parámetros`;
-  items = items.slice(0, 400);
-  $("#adv-list").innerHTML = items.map((p, i) => {
-    const idx = advCache.indexOf(p);
-    const val = p.value == null ? "" : String(p.value);
-    if (p.writable) {
-      return `<div class="adv-row"><div class="adv-path">${esc(p.path)}<span class="w">✎</span></div>
-        <div class="adv-edit"><input value="${escAttr(val)}" data-advidx="${idx}">
-        <button class="ghost small" data-advsave="${idx}">Guardar</button></div></div>`;
-    }
-    return `<div class="adv-row"><div class="adv-path">${esc(p.path)}</div><div class="adv-val">${esc(val || "-")}</div></div>`;
-  }).join("") || `<div class="muted">Sin resultados. Pulsa "Traer árbol completo" para descubrir todo el modelo.</div>`;
+  $("#adv-list").innerHTML = items.slice(0, 400).map(paramRow).join("")
+    || `<div class="muted">Sin resultados. Pulsa "Traer árbol completo" para descubrir todo el modelo.</div>`;
+}
+
+// guardar cualquier parámetro editable (Avanzado / IPv6)
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-psave]");
+  if (!b) return;
+  const input = b.previousElementSibling;
+  const path = input.dataset.ppath, type = input.dataset.ptype;
+  let value = input.value;
+  const t = (type || "").toLowerCase();
+  if (t.includes("bool")) value = (value === "true" || value === "1");
+  else if (t.includes("int") || t.includes("long")) value = Number(value);
+  b.disabled = true;
+  try {
+    const r = await api(`/devices/${enc(S.current)}/param`, { method: "PUT", body: { path, value, type: type || undefined } });
+    toast(r.applied ? "✓ Aplicado" : "En cola (próximo reporte)", r.applied ? "ok" : "info");
+  } catch (err) { toast(err.message, "err"); }
+  finally { b.disabled = false; }
+});
+
+// ---- IPv6: parámetros IPv6 que exponga el modelo ----
+async function loadIPv6() {
+  try {
+    const r = await api(`/devices/${enc(S.current)}/params?search=ipv6`);
+    $("#ipv6-count").textContent = r.count ? `${r.count} parámetros IPv6` : "";
+    $("#ipv6-list").innerHTML = r.count
+      ? r.params.map(paramRow).join("")
+      : `<div class="muted">Este equipo no expone parámetros IPv6 por TR-069. Pulsa "Traer parámetros IPv6" tras un refresco, o el firmware simplemente no los incluye.</div>`;
+  } catch (e) { toast(e.message, "err"); }
+}
+async function ipv6Refresh() {
+  toast("Buscando parámetros IPv6…", "info");
+  await api(`/devices/${enc(S.current)}/refresh`, { method: "POST" });
+  for (let i = 0; i < 6; i++) { await new Promise(r => setTimeout(r, 2500)); await loadIPv6(); if (($("#ipv6-count").textContent || "").length) break; }
 }
 $("#adv-search").addEventListener("input", renderParams);
 $("#adv-writable").addEventListener("change", renderParams);
@@ -297,23 +334,6 @@ async function advRefresh() {
   toast("✓ Árbol actualizado (" + advCache.length + " parámetros)", "ok");
 }
 
-document.addEventListener("click", async (e) => {
-  const b = e.target.closest("[data-advsave]");
-  if (!b) return;
-  const idx = +b.dataset.advsave;
-  const p = advCache[idx];
-  const input = $(`input[data-advidx="${idx}"]`);
-  let value = input.value;
-  const t = (p.type || "").toLowerCase();
-  if (t.includes("bool")) value = (value === "true" || value === "1");
-  else if (t.includes("int") || t.includes("long")) value = Number(value);
-  b.disabled = true;
-  try {
-    const r = await api(`/devices/${enc(S.current)}/param`, { method: "PUT", body: { path: p.path, value, type: p.type || undefined } });
-    toast(r.applied ? "✓ Aplicado" : "En cola (próximo reporte)", r.applied ? "ok" : "info");
-  } catch (err) { toast(err.message, "err"); }
-  finally { b.disabled = false; }
-});
 
 // mostrar campos estáticos solo en modo estático
 $("#wan-mode").addEventListener("change", () => {
@@ -434,6 +454,7 @@ const actions = {
 
 // registrar acciones definidas fuera del objeto (evita usar 'actions' antes de crearlo)
 actions["adv-refresh"] = advRefresh;
+actions["ipv6-refresh"] = ipv6Refresh;
 actions["backup-save"] = backupSave;
 actions["backup-restore"] = backupRestore;
 

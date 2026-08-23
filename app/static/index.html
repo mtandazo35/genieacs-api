@@ -67,6 +67,7 @@
         <button class="tab active" data-tab="wifi">WiFi</button>
         <button class="tab" data-tab="net">Red / IP</button>
         <button class="tab" data-tab="wan">WAN</button>
+        <button class="tab" data-tab="ipv6">IPv6</button>
         <button class="tab" data-tab="pppoe">PPPoE</button>
         <button class="tab" data-tab="dns">DNS</button>
         <button class="tab" data-tab="time">Hora</button>
@@ -119,6 +120,13 @@
         </div>
         <button data-action="wan">Aplicar WAN</button>
         <p class="muted small">⚠ Un cambio de WAN mal hecho puede dejar el equipo sin internet y sin contacto con el ACS.</p>
+      </div>
+
+      <div class="panel wide hidden" data-panel="ipv6">
+        <p class="muted small">Parámetros IPv6 que expone este modelo (leer/editar). Si sale vacío, el firmware del equipo no expone IPv6 por TR-069.</p>
+        <button type="button" data-action="ipv6-refresh" class="ghost">↻ Traer parámetros IPv6</button>
+        <div id="ipv6-count" class="muted small"></div>
+        <div id="ipv6-list" class="adv-list"></div>
       </div>
 
       <div class="panel hidden" data-panel="pppoe">
