@@ -18,6 +18,25 @@ GenieACS queda como **motor** por debajo; esta API pone la capa de negocio, la a
 
 FastAPI, con **Swagger automático en `/docs`**.
 
+## ⚡ Quick install (one-liner)
+
+En la VM (Debian 12/13 o Ubuntu 22.04/24.04, como root):
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/mtandazo35/genieacs-api/main/install.sh)
+```
+
+Instala dependencias, clona en `/opt/genieacs-api`, crea el entorno Python, pide la **URL del NBI de GenieACS** y crea el usuario **admin**, deja el servicio systemd `genieacs-api` corriendo en el puerto **8080** y abre el puerto en UFW si está activo. Al terminar muestra la URL del panel y las credenciales.
+
+Modo no interactivo / automatización:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mtandazo35/genieacs-api/main/install.sh -o /root/install.sh
+bash /root/install.sh install     # instalar/actualizar
+bash /root/install.sh update      # solo actualizar código y reiniciar
+bash /root/install.sh uninstall   # desinstalar
+```
+
 ## Arquitectura
 
 ```
