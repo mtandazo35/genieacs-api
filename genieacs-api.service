@@ -1,0 +1,14 @@
+[Unit]
+Description=GenieACS API (FastAPI sobre GenieACS)
+After=network.target genieacs-nbi.service
+
+[Service]
+User=genieacs
+WorkingDirectory=/opt/genieacs-api
+EnvironmentFile=/opt/genieacs-api/.env
+ExecStart=/opt/genieacs-api/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8080
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
