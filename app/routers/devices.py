@@ -173,6 +173,35 @@ async def wan_connections(device_id: str) -> list[dict]:
     return out
 
 
+_HOSTS_PREFIX = "InternetGatewayDevice.LANDevice.1.Hosts.Host"
+
+
+async def lan_hosts(device_id: str) -> list[dict]:
+    """Lista los clientes conectados (LAN hosts) que reporta el equipo."""
+    doc = await genie.get_device(device_id, [_HOSTS_PREFIX])
+    base = doc or {}
+    for part in _HOSTS_PREFIX.split("."):
+        base = base.get(part) if isinstance(base, dict) else None
+    out = []
+    if not isinstance(base, dict):
+        return out
+    for k, v in base.items():
+        if k.startswith("_") or not isinstance(v, dict):
+            continue
+        iface = _val(v, "InterfaceType") or ""
+        out.append({
+            "hostname": _val(v, "HostName"),
+            "ip": _val(v, "IPAddress"),
+            "mac": _val(v, "MACAddress"),
+            "active": _val(v, "Active"),
+            "source": _val(v, "AddressSource"),
+            "iface": "WiFi" if "11" in str(iface) else ("Ethernet" if "Ethernet" in str(iface) else iface),
+        })
+    # activos primero
+    out.sort(key=lambda h: (not h.get("active"), str(h.get("ip") or "")))
+    return out
+
+
 async def active_wan_prefix(device_id: str) -> str:
     """Path de la WANIPConnection activa (Connected). Para escribir la WAN en la
     instancia correcta, no en la .1 fija. Cae a .1 si no hay ninguna conectada."""
@@ -285,6 +314,13 @@ async def set_param(device_id: str, body: ParamIn, dev=Depends(authorized_device
     from .backup import merge_device_config
     merge_device_config(device_id, [triple])   # mantener el respaldo al dia
     return {"ok": True, **res}
+
+
+@router.get("/{device_id}/hosts")
+async def get_hosts(device_id: str, dev=Depends(authorized_device)):
+    """Clientes conectados (LAN hosts) del equipo."""
+    hosts = await lan_hosts(device_id)
+    return {"count": len(hosts), "hosts": hosts}
 
 
 @router.post("/read-bulk")

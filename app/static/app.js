@@ -228,7 +228,28 @@ $$(".tab").forEach(t => t.addEventListener("click", () => {
   if (t.dataset.tab === "backup") loadBackup();
   if (t.dataset.tab === "ipv6") loadIPv6();
   if (t.dataset.tab === "wan") loadWan();
+  if (t.dataset.tab === "clients") loadClients();
 }));
+
+// clientes conectados (LAN hosts)
+async function loadClients() {
+  try {
+    const r = await api(`/devices/${enc(S.current)}/hosts`);
+    $("#clients-count").textContent = `${r.count} cliente(s) conectado(s)`;
+    $("#clients-table tbody").innerHTML = r.count
+      ? r.hosts.map(h => `<tr><td>${esc(h.hostname || "-")}</td><td>${esc(h.ip || "-")}</td><td>${esc(h.mac || "-")}</td><td>${esc(h.iface || "-")}${h.source ? " · " + esc(h.source) : ""}</td><td>${h.active ? "🟢 activo" : "⚪ inactivo"}</td></tr>`).join("")
+      : `<tr><td colspan="5" class="muted">Sin clientes reportados. Pulsa Actualizar (o el equipo aún no los reportó).</td></tr>`;
+  } catch (e) { toast(e.message, "err"); }
+}
+$("#clients-refresh").addEventListener("click", async () => {
+  const b = $("#clients-refresh"); b.disabled = true; const p = b.textContent; b.textContent = "Actualizando…";
+  try {
+    await api(`/devices/${enc(S.current)}/refresh?object=${encodeURIComponent("InternetGatewayDevice.LANDevice.1.Hosts")}`, { method: "POST" });
+    for (let i = 0; i < 4; i++) { await new Promise(r => setTimeout(r, 2500)); await loadClients(); }
+    toast("✓ Clientes actualizados", "ok");
+  } catch (e) { toast(e.message, "err"); }
+  finally { b.disabled = false; b.textContent = p; }
+});
 
 // listar las conexiones WAN del equipo (cuantas y cual activa)
 async function loadWan() {

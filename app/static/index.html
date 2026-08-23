@@ -71,6 +71,7 @@
         <button class="tab" data-tab="dns">DNS</button>
         <button class="tab" data-tab="time">Hora</button>
         <button class="tab" data-tab="fw">Firmware</button>
+        <button class="tab" data-tab="clients">Clientes</button>
         <button class="tab" data-tab="power">Reinicio</button>
         <button class="tab" data-tab="backup">Respaldo</button>
         <button class="tab" data-tab="adv">Avanzado</button>
@@ -174,6 +175,12 @@
           <label class="chk"><input type="checkbox" id="backup-auto"> Restaurar automáticamente si el equipo se resetea de fábrica</label>
           <p class="muted small">Si está activo, el sistema vigila el equipo y, cuando detecta que volvió a los valores de fábrica (tras un reset), le vuelve a cargar la configuración guardada.</p>
         </div>
+      </div>
+
+      <div class="panel wide hidden" data-panel="clients">
+        <button type="button" id="clients-refresh" class="ghost small" style="margin-bottom:.8rem">↻ Actualizar</button>
+        <div id="clients-count" class="muted small"></div>
+        <table class="tbl" id="clients-table"><thead><tr><th>Equipo</th><th>IP</th><th>MAC</th><th>Conexión</th><th>Estado</th></tr></thead><tbody></tbody></table>
       </div>
 
       <div class="panel wide hidden" data-panel="adv">
