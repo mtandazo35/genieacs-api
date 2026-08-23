@@ -66,6 +66,14 @@ async def set_ip(device_id: str, body: IpIn, dev=Depends(authorized_device)):
     return await _apply(device_id, pmap, pairs)
 
 
+@router.get("/wan")
+async def get_wan(device_id: str, dev=Depends(authorized_device)):
+    """Lista las conexiones WAN del equipo (cuantas tiene y cual esta activa)."""
+    from .devices import wan_connections
+    conns = await wan_connections(device_id)
+    return {"count": len(conns), "connections": conns}
+
+
 @router.put("/wan", response_model=ActionResult)
 async def set_wan(device_id: str, body: WanIn, dev=Depends(authorized_device)):
     """Configura la WAN (DHCP o IP estatica) sobre la conexion WAN ACTIVA.

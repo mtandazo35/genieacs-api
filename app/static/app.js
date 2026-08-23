@@ -220,7 +220,19 @@ $$(".tab").forEach(t => t.addEventListener("click", () => {
   if (t.dataset.tab === "adv") loadParams();
   if (t.dataset.tab === "backup") loadBackup();
   if (t.dataset.tab === "ipv6") loadIPv6();
+  if (t.dataset.tab === "wan") loadWan();
 }));
+
+// listar las conexiones WAN del equipo (cuantas y cual activa)
+async function loadWan() {
+  try {
+    const r = await api(`/devices/${enc(S.current)}/wan`);
+    const box = $("#wan-list");
+    if (!r.count) { box.innerHTML = ""; return; }
+    box.innerHTML = `<div class="wan-head">${r.count} conexión(es) WAN en el equipo:</div>` +
+      r.connections.map(c => `<div class="wan-row">${c.active ? "🟢" : "⚪"} <b>${esc(c.instance)}</b> — ${esc(c.type || "?")} · ${esc(c.status || "?")}${c.ip ? " · " + esc(c.ip) : ""}${c.active ? ' <span class="wan-active">activa</span>' : ""}</div>`).join("");
+  } catch (e) { /* silencioso */ }
+}
 
 // ---- Respaldo / auto-restauración ----
 async function loadBackup() {

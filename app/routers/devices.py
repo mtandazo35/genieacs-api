@@ -132,6 +132,36 @@ async def _active_wan(device_id: str):
     return None
 
 
+async def wan_connections(device_id: str) -> list[dict]:
+    """Lista todas las conexiones WAN que reporta el equipo (para saber cuantas
+    tiene y cual esta activa)."""
+    doc = await genie.get_device(device_id, [_WAN_PREFIX])
+    base = doc or {}
+    for part in _WAN_PREFIX.split("."):
+        base = base.get(part) if isinstance(base, dict) else None
+    out = []
+    if not isinstance(base, dict):
+        return out
+    for coll, kind in (("WANIPConnection", "ip"), ("WANPPPConnection", "ppp")):
+        node = base.get(coll)
+        if not isinstance(node, dict):
+            continue
+        for k, v in node.items():
+            if k.startswith("_") or not isinstance(v, dict):
+                continue
+            st = _val(v, "ConnectionStatus")
+            out.append({
+                "instance": f"{coll}.{k}",
+                "type": "PPPoE" if kind == "ppp" else _val(v, "AddressingType"),
+                "status": st,
+                "ip": _val(v, "ExternalIPAddress"),
+                "gateway": _val(v, "DefaultGateway"),
+                "enable": _val(v, "Enable"),
+                "active": st in ("Connected", "Up"),
+            })
+    return out
+
+
 async def active_wan_prefix(device_id: str) -> str:
     """Path de la WANIPConnection activa (Connected). Para escribir la WAN en la
     instancia correcta, no en la .1 fija. Cae a .1 si no hay ninguna conectada."""
