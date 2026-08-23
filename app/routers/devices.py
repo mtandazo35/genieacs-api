@@ -1,7 +1,7 @@
 """Listado y estado de dispositivos (filtrado por ISP)."""
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from typing import Optional
+from typing import Any, Optional
 
 from ..bulk import resolve_targets
 from ..deps import CurrentUser, authorized_device, current_user, tenant_query
@@ -16,6 +16,31 @@ class BulkReadIn(BaseModel):
     model: Optional[str] = None
     device_ids: Optional[list[str]] = None
     all: bool = False
+
+
+class ParamIn(BaseModel):
+    path: str
+    value: Any
+    type: Optional[str] = None   # xsd:string / xsd:boolean / xsd:unsignedInt ...
+
+
+# raices de arbol TR-069 que exponemos completas
+_TREE_ROOTS = ("InternetGatewayDevice", "Device", "VirtualParameters")
+
+
+def _flatten(node: dict, prefix: str) -> list[dict]:
+    out = []
+    for k, v in node.items():
+        if k.startswith("_"):
+            continue
+        p = f"{prefix}.{k}" if prefix else k
+        if isinstance(v, dict):
+            if "_value" in v:
+                out.append({"path": p, "value": v.get("_value"),
+                            "writable": bool(v.get("_writable")), "type": v.get("_type")})
+            else:
+                out.extend(_flatten(v, p))
+    return out
 
 _STATUS_KEYS = [
     "firmware", "uptime", "cpu", "wan_mode", "wan_ip", "wan_gateway", "pppoe_enable", "pppoe_user",
@@ -99,6 +124,35 @@ async def read_status(device_id: str, dev=Depends(authorized_device)):
         if r:
             names.append(r[0])
     res = await genie.get_parameter_values(device_id, names)
+    return {"ok": True, **res}
+
+
+@router.get("/{device_id}/params")
+async def list_params(device_id: str, search: str = "", writable_only: bool = False,
+                      dev=Depends(authorized_device)):
+    """Todos los parametros del equipo que el ACS conoce (arbol completo).
+
+    Para traer TODO lo que el modelo expone, primero usar POST /refresh."""
+    full = await genie.get_device(device_id)
+    params: list[dict] = []
+    for root in _TREE_ROOTS:
+        if isinstance(full.get(root), dict):
+            params += _flatten(full[root], root)
+    if search:
+        s = search.lower()
+        params = [p for p in params if s in p["path"].lower()
+                  or (p["value"] is not None and s in str(p["value"]).lower())]
+    if writable_only:
+        params = [p for p in params if p["writable"]]
+    params.sort(key=lambda x: x["path"])
+    return {"count": len(params), "params": params}
+
+
+@router.put("/{device_id}/param")
+async def set_param(device_id: str, body: ParamIn, dev=Depends(authorized_device)):
+    """Escribe un parametro arbitrario del arbol (avanzado)."""
+    triple = [body.path, body.value] + ([body.type] if body.type else [])
+    res = await genie.set_parameter_values(device_id, [triple])
     return {"ok": True, **res}
 
 

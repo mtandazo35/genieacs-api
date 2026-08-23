@@ -71,6 +71,7 @@
         <button class="tab" data-tab="time">Hora</button>
         <button class="tab" data-tab="fw">Firmware</button>
         <button class="tab" data-tab="power">Reinicio</button>
+        <button class="tab" data-tab="adv">Avanzado</button>
       </div>
 
       <div class="panel" data-panel="wifi">
@@ -148,6 +149,16 @@
         </label>
         <button data-action="fw">Enviar actualización</button>
         <p class="muted small">Los archivos se cargan desde el servidor (solo admin). El equipo descargará y aplicará el firmware.</p>
+      </div>
+
+      <div class="panel wide hidden" data-panel="adv">
+        <div class="row" style="align-items:flex-end">
+          <label style="flex:2">Buscar parámetro<input id="adv-search" placeholder="p.ej. IPv6, WLAN, SSID, X_"></label>
+          <label class="chk"><input type="checkbox" id="adv-writable"> Solo editables</label>
+          <button type="button" data-action="adv-refresh" class="ghost">↻ Traer árbol completo</button>
+        </div>
+        <div id="adv-count" class="muted small"></div>
+        <div id="adv-list" class="adv-list"></div>
       </div>
 
       <div class="panel hidden" data-panel="power">

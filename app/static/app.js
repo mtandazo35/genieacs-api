@@ -217,7 +217,68 @@ function prefillForms(st) {
 $$(".tab").forEach(t => t.addEventListener("click", () => {
   $$(".tab").forEach(x => x.classList.remove("active")); t.classList.add("active");
   $$(".panel").forEach(p => p.classList.toggle("hidden", p.dataset.panel !== t.dataset.tab));
+  if (t.dataset.tab === "adv") loadParams();
 }));
+
+// ---- Avanzado: explorador de todo el árbol del modelo ----
+let advCache = [];
+async function loadParams() {
+  try {
+    const r = await api(`/devices/${enc(S.current)}/params`);
+    advCache = r.params;
+    renderParams();
+  } catch (e) { toast(e.message, "err"); }
+}
+function renderParams() {
+  const q = $("#adv-search").value.toLowerCase();
+  const wo = $("#adv-writable").checked;
+  let items = advCache;
+  if (wo) items = items.filter(p => p.writable);
+  if (q) items = items.filter(p => p.path.toLowerCase().includes(q) || (p.value != null && String(p.value).toLowerCase().includes(q)));
+  $("#adv-count").textContent = `${items.length} de ${advCache.length} parámetros`;
+  items = items.slice(0, 400);
+  $("#adv-list").innerHTML = items.map((p, i) => {
+    const idx = advCache.indexOf(p);
+    const val = p.value == null ? "" : String(p.value);
+    if (p.writable) {
+      return `<div class="adv-row"><div class="adv-path">${esc(p.path)}<span class="w">✎</span></div>
+        <div class="adv-edit"><input value="${escAttr(val)}" data-advidx="${idx}">
+        <button class="ghost small" data-advsave="${idx}">Guardar</button></div></div>`;
+    }
+    return `<div class="adv-row"><div class="adv-path">${esc(p.path)}</div><div class="adv-val">${esc(val || "-")}</div></div>`;
+  }).join("") || `<div class="muted">Sin resultados. Pulsa "Traer árbol completo" para descubrir todo el modelo.</div>`;
+}
+$("#adv-search").addEventListener("input", renderParams);
+$("#adv-writable").addEventListener("change", renderParams);
+
+actions["adv-refresh"] = async function () {
+  toast("Descubriendo todo el árbol del equipo…", "info");
+  await api(`/devices/${enc(S.current)}/refresh`, { method: "POST" });
+  for (let i = 0; i < 6; i++) {
+    await new Promise(r => setTimeout(r, 2500));
+    await loadParams();
+    if (advCache.length > 60) break;   // ya llegó el árbol grande
+  }
+  toast("✓ Árbol actualizado (" + advCache.length + " parámetros)", "ok");
+};
+
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-advsave]");
+  if (!b) return;
+  const idx = +b.dataset.advsave;
+  const p = advCache[idx];
+  const input = $(`input[data-advidx="${idx}"]`);
+  let value = input.value;
+  const t = (p.type || "").toLowerCase();
+  if (t.includes("bool")) value = (value === "true" || value === "1");
+  else if (t.includes("int") || t.includes("long")) value = Number(value);
+  b.disabled = true;
+  try {
+    const r = await api(`/devices/${enc(S.current)}/param`, { method: "PUT", body: { path: p.path, value, type: p.type || undefined } });
+    toast(r.applied ? "✓ Aplicado" : "En cola (próximo reporte)", r.applied ? "ok" : "info");
+  } catch (err) { toast(err.message, "err"); }
+  finally { b.disabled = false; }
+});
 
 // mostrar campos estáticos solo en modo estático
 $("#wan-mode").addEventListener("change", () => {
