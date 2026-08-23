@@ -459,7 +459,29 @@ document.addEventListener("click", async (e) => {
 });
 
 // ---- IPv6: parámetros IPv6 que exponga el modelo ----
+async function loadIPv6Config() {
+  try {
+    const c = await api(`/devices/${enc(S.current)}/ipv6-config`);
+    const box = $("#ipv6-cfg");
+    if (!c.supported) { box.classList.add("hidden"); return; }
+    box.classList.remove("hidden");
+    $("#ipv6cfg-type").innerHTML = (c.types || ["Auto"]).map(t => `<option value="${escAttr(t)}"${t === c.type ? " selected" : ""}>${esc(t)}</option>`).join("");
+    $("#ipv6cfg-enable").checked = c.enabled === true;
+    $("#ipv6cfg-info").textContent = `Interfaz WAN: ${c.interface || "?"} · estado actual: ${c.enabled ? "activado" : "desactivado"} (${c.type || "-"})`;
+  } catch { $("#ipv6-cfg").classList.add("hidden"); }
+}
+$("#ipv6cfg-save").addEventListener("click", async () => {
+  const b = $("#ipv6cfg-save"); b.disabled = true;
+  try {
+    const r = await api(`/devices/${enc(S.current)}/ipv6-config`, { method: "PUT", body: { enable: $("#ipv6cfg-enable").checked, type: $("#ipv6cfg-type").value } });
+    report(r);
+    setTimeout(() => { loadIPv6Config(); loadIPv6(); }, 3000);
+  } catch (e) { toast(e.message, "err"); }
+  finally { b.disabled = false; }
+});
+
 async function loadIPv6() {
+  loadIPv6Config();
   try {
     const r = await api(`/devices/${enc(S.current)}/params?search=ipv6`);
     $("#ipv6-count").textContent = r.count ? `${r.count} parámetros IPv6` : "";

@@ -1,7 +1,9 @@
 """Configuracion del CPE: WiFi, IP/DHCP, DNS, PPPoE, hora/fecha."""
 import ipaddress
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from ..deps import authorized_device
 from ..genieacs import genie
@@ -162,6 +164,48 @@ async def set_pppoe(device_id: str, body: PppoeIn, dev=Depends(authorized_device
         ("pppoe_password", body.password),
     ]
     return await _apply(device_id, pmap, pairs)
+
+
+class Ipv6In(BaseModel):
+    enable: Optional[bool] = None
+    type: Optional[str] = None    # Auto / DHCPv6 / SLAAC / PPPoE / Static
+
+
+@router.get("/ipv6-config")
+async def get_ipv6_config(device_id: str, dev=Depends(authorized_device)):
+    """Estado de la config IPv6 (WAN). Solo modelos que la exponen (TR-181/TP-Link)."""
+    if pick_map(dev).get("root") != "Device":
+        return {"supported": False, "reason": "Este modelo no expone config IPv6 por TR-069 (usa Avanzado)."}
+    from .devices import tr181_wan_interface, _read
+    pref = await tr181_wan_interface(device_id)
+    if not pref:
+        return {"supported": False, "reason": "No se identificó la interfaz WAN IPv6."}
+    doc = await genie.get_device(device_id, [pref])
+    return {"supported": True, "interface": pref,
+            "enabled": _read(doc or {}, f"{pref}.IPv6Enable"),
+            "type": _read(doc or {}, f"{pref}.X_TP_IPv6AddrType"),
+            "types": ["Auto", "DHCPv6", "SLAAC", "PPPoE", "Static"]}
+
+
+@router.put("/ipv6-config", response_model=ActionResult)
+async def set_ipv6_config(device_id: str, body: Ipv6In, dev=Depends(authorized_device)):
+    """Activa/configura IPv6 en la WAN (habilitar + método)."""
+    if pick_map(dev).get("root") != "Device":
+        raise HTTPException(400, "Este modelo no soporta config IPv6 por esta vía; usa la pestaña Avanzado.")
+    from .devices import tr181_wan_interface
+    pref = await tr181_wan_interface(device_id)
+    if not pref:
+        raise HTTPException(400, "No se identificó la interfaz WAN para IPv6.")
+    values = []
+    if body.type:
+        values.append([f"{pref}.X_TP_IPv6AddrType", body.type, "xsd:string"])
+    if body.enable is not None:
+        values.append([f"{pref}.IPv6Enable", body.enable, "xsd:boolean"])
+    if not values:
+        raise HTTPException(400, "Nada que aplicar")
+    res = await genie.set_parameter_values(device_id, values)
+    return ActionResult(applied=res["applied"], queued=res["queued"],
+                        detail=f"IPv6 {'activado' if body.enable else 'configurado'} en {pref.split('.')[-1]}")
 
 
 @router.put("/access", response_model=ActionResult)

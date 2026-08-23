@@ -200,6 +200,28 @@ async def _active_wan(device_id: str):
     return None
 
 
+async def tr181_wan_interface(device_id: str) -> str | None:
+    """Devuelve el prefijo de la IP.Interface WAN (Internet) en TR-181, p.ej.
+    'Device.IP.Interface.4'. Se usa para activar/leer IPv6 en la WAN."""
+    doc = await genie.get_device(device_id, ["Device.IP.Interface"])
+    node = doc.get("Device", {}).get("IP", {}).get("Interface") if isinstance(doc, dict) else None
+    if not isinstance(node, dict):
+        return None
+    cand = None
+    for k, v in node.items():
+        if k.startswith("_") or not isinstance(v, dict):
+            continue
+        if _val(v, "X_TP_ServiceType") == "Internet":
+            return f"Device.IP.Interface.{k}"
+        # respaldo: una interfaz con IPv6 ya configurado por DHCPv6
+        addr = v.get("IPv6Address", {})
+        if isinstance(addr, dict):
+            for ak, av in addr.items():
+                if isinstance(av, dict) and _val(av, "Origin") in ("DHCPv6", "PrefixDelegation"):
+                    cand = f"Device.IP.Interface.{k}"
+    return cand
+
+
 async def wan_connections(device_id: str) -> list[dict]:
     """Lista todas las conexiones WAN que reporta el equipo (para saber cuantas
     tiene y cual esta activa)."""
