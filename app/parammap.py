@@ -32,6 +32,12 @@ TR098 = {
         # --- DNS ---
         "lan_dns": "InternetGatewayDevice.LANDevice.1.LANHostConfigManagement.DNSServers",   # DNS entregado por DHCP
         "wan_dns": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.DNSServers",
+        # --- WAN (IP estatica / DHCP) sobre WANIPConnection.1 ---
+        "wan_mode": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.AddressingType",  # 'Static'/'DHCP'
+        "wan_ip": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.ExternalIPAddress",
+        "wan_mask": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.SubnetMask",
+        "wan_gateway": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.DefaultGateway",
+        "wan_mtu": ("InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.MaxMTUSize", "xsd:unsignedInt"),
         # --- PPPoE (WANPPPConnection.1) ---
         "pppoe_enable": ("InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Enable", "xsd:boolean"),
         "pppoe_user": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username",
@@ -44,7 +50,6 @@ TR098 = {
         "uptime": "InternetGatewayDevice.DeviceInfo.UpTime",
         "firmware": "InternetGatewayDevice.DeviceInfo.SoftwareVersion",
         "cpu": "InternetGatewayDevice.DeviceInfo.ProcessStatus.CPUUsage",
-        "wan_ip": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.ExternalIPAddress",
     },
 }
 

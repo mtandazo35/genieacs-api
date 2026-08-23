@@ -18,7 +18,7 @@ class BulkReadIn(BaseModel):
     all: bool = False
 
 _STATUS_KEYS = [
-    "firmware", "uptime", "cpu", "wan_ip", "pppoe_enable", "pppoe_user",
+    "firmware", "uptime", "cpu", "wan_mode", "wan_ip", "wan_gateway", "pppoe_enable", "pppoe_user",
     "lan_ip", "dhcp_min", "dhcp_max",
     "wifi_2g_ssid", "wifi_2g_password", "wifi_2g_enable", "wifi_2g_channel",
     "wifi_5g_ssid", "wifi_5g_password", "wifi_5g_enable", "wifi_5g_channel",

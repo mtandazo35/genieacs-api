@@ -39,6 +39,15 @@ class PppoeIn(BaseModel):
     password: Optional[str] = None
 
 
+class WanIn(BaseModel):
+    mode: str = Field(..., pattern="^(dhcp|static)$", description="dhcp o static")
+    ip: Optional[str] = None
+    mask: Optional[str] = None
+    gateway: Optional[str] = None
+    dns: Optional[list[str]] = Field(None, max_length=4)
+    mtu: Optional[int] = Field(None, ge=576, le=1500)
+
+
 class DnsIn(BaseModel):
     scope: str = Field("lan", pattern="^(lan|wan)$", description="lan=DNS por DHCP, wan=DNS del enlace")
     servers: list[str] = Field(..., min_length=1, max_length=4)

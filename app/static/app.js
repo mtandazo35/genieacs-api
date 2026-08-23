@@ -176,7 +176,8 @@ function renderStatus(st) {
       cell("Último reporte", fmtDate(st.last_inform)),
     ]],
     ["Internet (WAN)", [
-      cell("IP WAN", st.wan_ip),
+      cell("Tipo", st.wan_mode),
+      cell("IP WAN", st.wan_ip), cell("Gateway", st.wan_gateway),
       cell("PPPoE", st.pppoe_enable ? "activo (" + (st.pppoe_user || "").trim() + ")" : "inactivo"),
     ]],
     ["Red local (LAN)", [
@@ -215,6 +216,11 @@ $$(".tab").forEach(t => t.addEventListener("click", () => {
   $$(".tab").forEach(x => x.classList.remove("active")); t.classList.add("active");
   $$(".panel").forEach(p => p.classList.toggle("hidden", p.dataset.panel !== t.dataset.tab));
 }));
+
+// mostrar campos estáticos solo en modo estático
+$("#wan-mode").addEventListener("change", () => {
+  $("#wan-static").classList.toggle("hidden", $("#wan-mode").value !== "static");
+});
 
 $$("[data-back]").forEach(b => b.addEventListener("click", () => {
   $("#device-page").classList.add("hidden"); $("#devices-page").classList.remove("hidden");
@@ -262,6 +268,23 @@ const actions = {
     const r = await api(`/devices/${enc(S.current)}/ip`, { method: "PUT", body });
     report(r); refreshAfterChange(r);
     clearInputs("net-ip", "net-mask", "net-min", "net-max", "net-lease");
+  },
+  async wan() {
+    const mode = $("#wan-mode").value;
+    const body = { mode };
+    if (mode === "static") {
+      body.ip = $("#wan-ip").value.trim();
+      body.mask = $("#wan-mask").value.trim();
+      body.gateway = $("#wan-gw").value.trim();
+      const dns = $("#wan-dns").value.split(/\s+/).map(s => s.trim()).filter(Boolean);
+      if (dns.length) body.dns = dns;
+      if ($("#wan-mtu").value) body.mtu = +$("#wan-mtu").value;
+      if (!body.ip || !body.mask || !body.gateway) return toast("IP, máscara y gateway son obligatorios en estático", "err");
+    }
+    if (!confirm("¿Aplicar configuración WAN (" + mode + ")? Un error puede dejar el equipo sin conexión.")) return;
+    const r = await api(`/devices/${enc(S.current)}/wan`, { method: "PUT", body });
+    report(r); refreshAfterChange(r);
+    clearInputs("wan-ip", "wan-mask", "wan-gw", "wan-dns", "wan-mtu");
   },
   async pppoe() {
     const body = { enable: $("#ppp-enable").checked };

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from ..deps import authorized_device
 from ..genieacs import genie
 from ..parammap import pick_map, resolve
-from ..schemas import ActionResult, DnsIn, IpIn, PppoeIn, TimeIn, WifiIn
+from ..schemas import ActionResult, DnsIn, IpIn, PppoeIn, TimeIn, WanIn, WifiIn
 
 router = APIRouter(prefix="/devices/{device_id}", tags=["config"])
 
@@ -61,6 +61,27 @@ async def set_ip(device_id: str, body: IpIn, dev=Depends(authorized_device)):
         ("dhcp_max", body.dhcp_max),
         ("dhcp_lease", body.dhcp_lease),
     ]
+    return await _apply(device_id, pmap, pairs)
+
+
+@router.put("/wan", response_model=ActionResult)
+async def set_wan(device_id: str, body: WanIn, dev=Depends(authorized_device)):
+    """Configura la WAN como DHCP o IP estatica (WANIPConnection.1).
+
+    OJO: cambiar mal la WAN puede dejar al equipo sin internet y sin contacto
+    con el ACS. En estatico se exigen ip, mascara y gateway."""
+    pmap = pick_map(dev)
+    if body.mode == "dhcp":
+        pairs = [("wan_mode", "DHCP")]
+    else:
+        if not (body.ip and body.mask and body.gateway):
+            raise HTTPException(400, "En modo estatico se requieren ip, mask y gateway")
+        pairs = [
+            ("wan_mode", "Static"),
+            ("wan_ip", body.ip), ("wan_mask", body.mask), ("wan_gateway", body.gateway),
+            ("wan_dns", ",".join(body.dns) if body.dns else None),
+            ("wan_mtu", body.mtu),
+        ]
     return await _apply(device_id, pmap, pairs)
 
 
