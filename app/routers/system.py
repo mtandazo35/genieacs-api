@@ -21,6 +21,10 @@ router = APIRouter(tags=["system"])
 
 PROVISION_NAME = "scheduled-reboot"
 PRESET_NAME = "scheduled-reboot"
+# Tag marcador de coincidencia EXACTA. GenieACS no acepta $regex sobre _tags en
+# las precondiciones (lanza "Invalid tag query" y mata el worker cwmp), asi que
+# marcamos los equipos con horario con este tag fijo y filtramos por el.
+SCHED_MARKER = "sched-reboot"
 
 # --- JS del provision (se declara una vez, es global) ---------------------
 _PROVISION_JS = r"""
@@ -57,7 +61,8 @@ async def _ensure_scheduled_reboot_objects() -> None:
     await genie.put_provision(PROVISION_NAME, _PROVISION_JS)
     await genie.put_preset(PRESET_NAME, {
         "weight": 0,
-        "precondition": '{"_tags":{"$regex":"^reboot@"}}',
+        # coincidencia exacta por el tag marcador (NO usar $regex sobre _tags)
+        "precondition": f'{{"_tags":"{SCHED_MARKER}"}}',
         "configurations": [{"type": "provision", "name": PROVISION_NAME}],
     })
 
@@ -99,6 +104,7 @@ async def set_schedule(device_id: str, body: ScheduleRebootIn, dev=Depends(autho
         await genie.remove_tag(device_id, t)
     tag = f"{get_settings().reboot_tag_prefix}{body.hour:02d}:{body.minute:02d}"
     await genie.add_tag(device_id, tag)
+    await genie.add_tag(device_id, SCHED_MARKER)   # activa el preset (match exacto)
     return {"ok": True, "scheduled": True, "hour": body.hour, "minute": body.minute, "tag": tag,
             "detail": "Se reiniciara a esa hora (dentro de la ventana del intervalo de inform)."}
 
@@ -108,6 +114,8 @@ async def clear_schedule(device_id: str, dev=Depends(authorized_device)):
     removed = _reboot_tags(dev)
     for t in removed:
         await genie.remove_tag(device_id, t)
+    if SCHED_MARKER in (dev.get("_tags") or []):
+        await genie.remove_tag(device_id, SCHED_MARKER)
     return {"ok": True, "removed": removed}
 
 
