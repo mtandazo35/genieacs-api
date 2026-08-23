@@ -108,6 +108,8 @@ TR181 = {
         "remote_enable": ("Device.UserInterface.RemoteAccess.Enable", "xsd:boolean"),
         "remote_port": ("Device.UserInterface.RemoteAccess.Port", "xsd:unsignedInt"),
         "remote_protocol": "Device.UserInterface.RemoteAccess.Protocol",
+        "remote_protocol_x": "Device.UserInterface.RemoteAccess.X_TP_Protocol",
+        "remote_port_x": "Device.UserInterface.RemoteAccess.X_TP_Port",
         "admin_user": "Device.Users.User.1.Username",
         "admin_password": "Device.Users.User.1.Password",
         "admin_enable": ("Device.Users.User.1.Enable", "xsd:boolean"),

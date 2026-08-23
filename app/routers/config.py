@@ -222,7 +222,13 @@ async def set_access(device_id: str, body: AccessIn, dev=Depends(authorized_devi
         port = body.remote_port if body.remote_port else 8080
         pairs.append(("remote_port", port))
         if resolve(pmap, "remote_protocol"):
-            pairs.append(("remote_protocol", body.remote_protocol or "HTTPS"))
+            proto = body.remote_protocol or "HTTPS"
+            pairs.append(("remote_protocol", proto))
+            # TP-Link exige tambien los X_TP_* o revierte el cambio
+            if resolve(pmap, "remote_protocol_x"):
+                pairs.append(("remote_protocol_x", proto))
+            if resolve(pmap, "remote_port_x"):
+                pairs.append(("remote_port_x", str(port)))
     elif body.remote_port:
         pairs.append(("remote_port", body.remote_port))
     # al fijar clave admin, habilitar la cuenta si el modelo lo requiere
