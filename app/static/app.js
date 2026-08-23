@@ -228,6 +228,13 @@ function report(r) {
   if (r && r.detail) console.log(r.detail);
 }
 
+// tras un cambio, re-leer el equipo para mostrar los datos nuevos.
+// Si se aplicó al instante, refresca ya; si quedó en cola, reintenta un poco.
+function refreshAfterChange(r) {
+  if (!S.current) return;
+  setTimeout(() => readDevice(true), r && r.applied ? 1500 : 4000);
+}
+
 // ===== Acciones =====
 const actions = {
   async wifi() {
@@ -237,7 +244,8 @@ const actions = {
     body.enable = $("#wifi-enable").checked;
     if ($("#wifi-channel").value) body.channel = +$("#wifi-channel").value;
     body.hidden = $("#wifi-hidden").checked;
-    report(await api(`/devices/${enc(S.current)}/wifi`, { method: "PUT", body }));
+    const r = await api(`/devices/${enc(S.current)}/wifi`, { method: "PUT", body });
+    report(r); refreshAfterChange(r);
   },
   async net() {
     const body = {};
@@ -247,25 +255,29 @@ const actions = {
     if ($("#net-max").value.trim()) body.dhcp_max = $("#net-max").value.trim();
     body.dhcp_enable = $("#net-dhcp").checked;
     if ($("#net-lease").value) body.dhcp_lease = +$("#net-lease").value;
-    report(await api(`/devices/${enc(S.current)}/ip`, { method: "PUT", body }));
+    const r = await api(`/devices/${enc(S.current)}/ip`, { method: "PUT", body });
+    report(r); refreshAfterChange(r);
   },
   async pppoe() {
     const body = { enable: $("#ppp-enable").checked };
     if ($("#ppp-user").value.trim()) body.username = $("#ppp-user").value.trim();
     if ($("#ppp-pass").value) body.password = $("#ppp-pass").value;
-    report(await api(`/devices/${enc(S.current)}/pppoe`, { method: "PUT", body }));
+    const r = await api(`/devices/${enc(S.current)}/pppoe`, { method: "PUT", body });
+    report(r); refreshAfterChange(r);
   },
   async dns() {
     const servers = $("#dns-servers").value.split(/\s+/).map(s => s.trim()).filter(Boolean);
     if (!servers.length) return toast("Indica al menos un servidor DNS", "err");
-    report(await api(`/devices/${enc(S.current)}/dns`, { method: "PUT", body: { scope: $("#dns-scope").value, servers } }));
+    const r = await api(`/devices/${enc(S.current)}/dns`, { method: "PUT", body: { scope: $("#dns-scope").value, servers } });
+    report(r); refreshAfterChange(r);
   },
   async time() {
     const body = {};
     if ($("#time-tz").value.trim()) body.timezone = $("#time-tz").value.trim();
     if ($("#time-ntp1").value.trim()) body.ntp1 = $("#time-ntp1").value.trim();
     if ($("#time-ntp2").value.trim()) body.ntp2 = $("#time-ntp2").value.trim();
-    report(await api(`/devices/${enc(S.current)}/time`, { method: "PUT", body }));
+    const r = await api(`/devices/${enc(S.current)}/time`, { method: "PUT", body });
+    report(r); refreshAfterChange(r);
   },
   async fw() {
     const f = $("#fw-file").value;
