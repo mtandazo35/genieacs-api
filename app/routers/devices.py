@@ -345,9 +345,32 @@ async def device_status(device_id: str, dev=Depends(authorized_device)):
         except Exception:
             pass
     else:
-        # TR-181: PPPoE segun ConnectionStatus del PPP.Interface
-        if result.get("pppoe_status") and result["pppoe_status"] != "Unconfigured":
-            result["pppoe_enable"] = result["pppoe_status"] in ("Connected", "Connecting", "Up")
+        # TR-181: WAN desde la interfaz Internet + PPPoE
+        try:
+            ifnode = full.get("Device", {}).get("IP", {}).get("Interface", {})
+            wan = None
+            for k, v in ifnode.items():
+                if isinstance(v, dict) and _val(v, "X_TP_ServiceType") == "Internet":
+                    wan = v
+                    break
+            if isinstance(wan, dict):
+                addr = (wan.get("IPv4Address", {}) or {}).get("1", {})
+                result["wan_mode"] = _val(addr, "AddressingType")
+                result["wan_ip"] = _val(addr, "IPAddress")
+            # gateway TR-181: buscar en Routing una ruta con gateway
+            rt = full.get("Device", {}).get("Routing", {}).get("Router", {}).get("1", {}).get("IPv4Forwarding", {})
+            if isinstance(rt, dict):
+                for k, v in rt.items():
+                    if isinstance(v, dict):
+                        gw = _val(v, "GatewayIPAddress")
+                        if gw and gw not in ("", "0.0.0.0"):
+                            result["wan_gateway"] = gw
+                            break
+            if result.get("pppoe_status") in ("Connected", "Connecting", "Up"):
+                result["wan_mode"] = "PPPoE"
+                result["pppoe_enable"] = True
+        except Exception:
+            pass
     return result
 
 
@@ -435,10 +458,19 @@ async def get_hosts(device_id: str, dev=Depends(authorized_device)):
     return {"count": len(hosts), "hosts": hosts}
 
 
+def _diag_prefix(dev, kind):
+    """Ruta del objeto de diagnostico segun el modelo de datos."""
+    if pick_map(dev).get("root") == "Device":  # TR-181
+        return {"ping": "Device.IP.Diagnostics.IPPing",
+                "trace": "Device.IP.Diagnostics.TraceRoute"}[kind]
+    return {"ping": "InternetGatewayDevice.IPPingDiagnostics",
+            "trace": "InternetGatewayDevice.TraceRouteDiagnostics"}[kind]
+
+
 @router.post("/{device_id}/diag/ping")
 async def diag_ping(device_id: str, body: PingIn, dev=Depends(authorized_device)):
-    """Ping desde el propio equipo (IPPingDiagnostics)."""
-    prefix = "InternetGatewayDevice.IPPingDiagnostics"
+    """Ping desde el propio equipo (TR-098 IPPingDiagnostics / TR-181 IP.Diagnostics.IPPing)."""
+    prefix = _diag_prefix(dev, "ping")
     state = await _run_diag(device_id, prefix, {
         "Host": (body.host, "xsd:string"),
         "NumberOfRepetitions": (max(1, min(body.count, 20)), "xsd:unsignedInt"),
@@ -453,8 +485,8 @@ async def diag_ping(device_id: str, body: PingIn, dev=Depends(authorized_device)
 
 @router.post("/{device_id}/diag/traceroute")
 async def diag_traceroute(device_id: str, body: TraceIn, dev=Depends(authorized_device)):
-    """Traceroute desde el propio equipo (TraceRouteDiagnostics)."""
-    prefix = "InternetGatewayDevice.TraceRouteDiagnostics"
+    """Traceroute desde el propio equipo (TR-098/TR-181)."""
+    prefix = _diag_prefix(dev, "trace")
     state = await _run_diag(device_id, prefix, {
         "Host": (body.host, "xsd:string"),
         "MaxHopCount": (max(1, min(body.max_hops, 30)), "xsd:unsignedInt"),
