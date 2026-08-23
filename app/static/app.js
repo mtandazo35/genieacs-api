@@ -234,6 +234,19 @@ async function loadWan() {
   } catch (e) { /* silencioso */ }
 }
 
+// refrescar la WAN desde el equipo (evita datos cacheados viejos)
+$("#wan-refresh").addEventListener("click", async () => {
+  const b = $("#wan-refresh"); b.disabled = true; const p = b.textContent; b.textContent = "Actualizando…";
+  try {
+    await api(`/devices/${enc(S.current)}/refresh?object=${encodeURIComponent("InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1")}`, { method: "POST" });
+    for (let i = 0; i < 5; i++) { await new Promise(r => setTimeout(r, 2500)); await loadWan(); }
+    // refrescar tambien la ficha de estado
+    const st = await api(`/devices/${enc(S.current)}/status`); renderStatus(st);
+    toast("✓ WAN actualizada", "ok");
+  } catch (e) { toast(e.message, "err"); }
+  finally { b.disabled = false; b.textContent = p; }
+});
+
 // ---- Respaldo / auto-restauración ----
 async function loadBackup() {
   try {

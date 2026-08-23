@@ -217,11 +217,13 @@ async def device_status(device_id: str, dev=Depends(authorized_device)):
 
 
 @router.post("/{device_id}/refresh")
-async def refresh(device_id: str, dev=Depends(authorized_device)):
-    """Fuerza al CPE a re-enviar todo su arbol (GetParameterNames de la raiz)."""
+async def refresh(device_id: str, object: str = "", dev=Depends(authorized_device)):
+    """Fuerza al CPE a re-enviar su arbol. Sin 'object' refresca la raiz;
+    con 'object' refresca solo ese subarbol (mas rapido)."""
     pmap = pick_map(dev)
     # OJO: root SIN punto final (clientes tipo Cudy fallan con el punto).
-    res = await genie.refresh_object(device_id, pmap["root"])
+    obj = object or pmap["root"]
+    res = await genie.refresh_object(device_id, obj)
     return {"ok": True, **res}
 
 
