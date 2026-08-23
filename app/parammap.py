@@ -107,6 +107,7 @@ TR181 = {
         # --- Acceso remoto (WAN) y usuario admin del equipo ---
         "remote_enable": ("Device.UserInterface.RemoteAccess.Enable", "xsd:boolean"),
         "remote_port": ("Device.UserInterface.RemoteAccess.Port", "xsd:unsignedInt"),
+        "remote_protocol": "Device.UserInterface.RemoteAccess.Protocol",
         "admin_user": "Device.Users.User.1.Username",
         "admin_password": "Device.Users.User.1.Password",
         "admin_enable": ("Device.Users.User.1.Enable", "xsd:boolean"),

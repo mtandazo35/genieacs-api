@@ -214,10 +214,17 @@ async def set_access(device_id: str, body: AccessIn, dev=Depends(authorized_devi
     pmap = pick_map(dev)
     pairs = [
         ("remote_enable", body.remote_enable),
-        ("remote_port", body.remote_port),
         ("admin_user", body.admin_user),
         ("admin_password", body.admin_password),
     ]
+    # acceso remoto: algunos equipos (TP-Link/TR-181) exigen puerto y protocolo al habilitar
+    if body.remote_enable:
+        port = body.remote_port if body.remote_port else 8080
+        pairs.append(("remote_port", port))
+        if resolve(pmap, "remote_protocol"):
+            pairs.append(("remote_protocol", "HTTPS"))
+    elif body.remote_port:
+        pairs.append(("remote_port", body.remote_port))
     # al fijar clave admin, habilitar la cuenta si el modelo lo requiere
     if body.admin_password and resolve(pmap, "admin_enable"):
         pairs.append(("admin_enable", True))
