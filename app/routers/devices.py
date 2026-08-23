@@ -65,3 +65,19 @@ async def refresh(device_id: str, dev=Depends(authorized_device)):
     # OJO: root SIN punto final (clientes tipo Cudy fallan con el punto).
     res = await genie.refresh_object(device_id, pmap["root"])
     return {"ok": True, **res}
+
+
+@router.post("/{device_id}/read")
+async def read_status(device_id: str, dev=Depends(authorized_device)):
+    """Lee del CPE los parametros de estado (getParameterValues).
+
+    Mas liviano que refrescar todo el arbol: pide solo lo que muestra la ficha.
+    Tras un BOOTSTRAP estos valores desaparecen de la cache; esto los repuebla."""
+    pmap = pick_map(dev)
+    names = []
+    for k in _STATUS_KEYS:
+        r = resolve(pmap, k)
+        if r:
+            names.append(r[0])
+    res = await genie.get_parameter_values(device_id, names)
+    return {"ok": True, **res}

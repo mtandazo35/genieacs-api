@@ -116,7 +116,30 @@ async function openDevice(id) {
     prefillForms(st);
     loadFirmware();
     loadSchedule();
+    // si faltan datos volatiles (se pierden tras un BOOTSTRAP), leer del equipo
+    if (st.uptime == null || st.cpu == null || st.lan_ip == null) readDevice(true);
   } catch (e) { toast(e.message, "err"); }
+}
+
+// Lee datos frescos del CPE (getParameterValues) y refresca la ficha.
+async function readDevice(silent) {
+  const id = S.current;
+  const btn = $("#read-btn");
+  const prev = btn.textContent;
+  btn.disabled = true; btn.textContent = "Leyendo…";
+  if (!silent) toast("Pidiendo datos al equipo…", "info");
+  try {
+    await api(`/devices/${enc(id)}/read`, { method: "POST" });
+    // el equipo responde en su sesion; reintentar la ficha unas veces
+    for (let i = 0; i < 5; i++) {
+      await new Promise(r => setTimeout(r, 2500));
+      if (S.current !== id) return;                // el usuario cambió de vista
+      const st = await api(`/devices/${enc(id)}/status`);
+      renderStatus(st);
+      if (st.uptime != null && st.cpu != null) { if (!silent) toast("✓ Datos actualizados", "ok"); break; }
+    }
+  } catch (e) { if (!silent) toast(e.message, "err"); }
+  finally { btn.disabled = false; btn.textContent = prev; }
 }
 
 function renderStatus(st) {
@@ -200,6 +223,7 @@ const actions = {
     if (!confirm("¿Enviar la actualización " + f + " al equipo?")) return;
     report(await api(`/devices/${enc(S.current)}/firmware`, { method: "POST", body: { file_name: f } }));
   },
+  async read() { await readDevice(false); },
   async reboot() {
     if (!confirm("¿Reiniciar el equipo ahora?")) return;
     report(await api(`/devices/${enc(S.current)}/reboot`, { method: "POST" }));
