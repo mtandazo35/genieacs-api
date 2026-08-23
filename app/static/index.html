@@ -143,7 +143,7 @@
         <p class="muted small">⚠ Un cambio de WAN mal hecho puede dejar el equipo sin internet y sin contacto con el ACS.</p>
       </div>
 
-      <div class="panel wide hidden" data-panel="ipv6">
+      <div class="panel hidden" data-panel="ipv6">
         <div id="ipv6-cfg" class="ipv6-cfg hidden">
           <h3 style="margin-top:0">Activar IPv6 (WAN)</h3>
           <div class="row">
@@ -152,12 +152,8 @@
           </div>
           <button type="button" id="ipv6cfg-save">Aplicar IPv6</button>
           <div id="ipv6cfg-info" class="muted small"></div>
-          <hr style="border-color:var(--line);margin:1.2rem 0">
         </div>
-        <p class="muted small">Parámetros IPv6 que expone este modelo (leer/editar). Si sale vacío, el firmware del equipo no expone IPv6 por TR-069.</p>
-        <button type="button" data-action="ipv6-refresh" class="ghost">↻ Traer parámetros IPv6</button>
-        <div id="ipv6-count" class="muted small"></div>
-        <div id="ipv6-list" class="adv-list"></div>
+        <div id="ipv6-none" class="muted hidden">Este equipo no expone configuración IPv6 por TR-069. (Los parámetros crudos, si los hay, están en la pestaña Avanzado.)</div>
       </div>
 
 

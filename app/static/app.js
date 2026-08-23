@@ -463,7 +463,8 @@ async function loadIPv6Config() {
   try {
     const c = await api(`/devices/${enc(S.current)}/ipv6-config`);
     const box = $("#ipv6-cfg");
-    if (!c.supported) { box.classList.add("hidden"); return; }
+    if (!c.supported) { box.classList.add("hidden"); $("#ipv6-none").classList.remove("hidden"); return; }
+    $("#ipv6-none").classList.add("hidden");
     box.classList.remove("hidden");
     $("#ipv6cfg-type").innerHTML = (c.types || ["Auto"]).map(t => `<option value="${escAttr(t)}"${t === c.type ? " selected" : ""}>${esc(t)}</option>`).join("");
     $("#ipv6cfg-enable").checked = c.enabled === true;
@@ -475,26 +476,13 @@ $("#ipv6cfg-save").addEventListener("click", async () => {
   try {
     const r = await api(`/devices/${enc(S.current)}/ipv6-config`, { method: "PUT", body: { enable: $("#ipv6cfg-enable").checked, type: $("#ipv6cfg-type").value } });
     report(r);
-    setTimeout(() => { loadIPv6Config(); loadIPv6(); }, 3000);
+    setTimeout(loadIPv6Config, 3000);
   } catch (e) { toast(e.message, "err"); }
   finally { b.disabled = false; }
 });
 
-async function loadIPv6() {
-  loadIPv6Config();
-  try {
-    const r = await api(`/devices/${enc(S.current)}/params?search=ipv6`);
-    $("#ipv6-count").textContent = r.count ? `${r.count} parámetros IPv6` : "";
-    $("#ipv6-list").innerHTML = r.count
-      ? r.params.map(paramRow).join("")
-      : `<div class="muted">Este equipo no expone parámetros IPv6 por TR-069. Pulsa "Traer parámetros IPv6" tras un refresco, o el firmware simplemente no los incluye.</div>`;
-  } catch (e) { toast(e.message, "err"); }
-}
-async function ipv6Refresh() {
-  toast("Buscando parámetros IPv6…", "info");
-  await api(`/devices/${enc(S.current)}/refresh`, { method: "POST" });
-  for (let i = 0; i < 6; i++) { await new Promise(r => setTimeout(r, 2500)); await loadIPv6(); if (($("#ipv6-count").textContent || "").length) break; }
-}
+// la pestaña IPv6 solo muestra la config (los params crudos están en Avanzado)
+async function loadIPv6() { loadIPv6Config(); }
 $("#adv-search").addEventListener("input", renderParams);
 $("#adv-writable").addEventListener("change", renderParams);
 
@@ -663,7 +651,6 @@ const actions = {
 
 // registrar acciones definidas fuera del objeto (evita usar 'actions' antes de crearlo)
 actions["adv-refresh"] = advRefresh;
-actions["ipv6-refresh"] = ipv6Refresh;
 actions["backup-save"] = backupSave;
 actions["backup-restore"] = backupRestore;
 
