@@ -222,7 +222,7 @@ async def set_access(device_id: str, body: AccessIn, dev=Depends(authorized_devi
         port = body.remote_port if body.remote_port else 8080
         pairs.append(("remote_port", port))
         if resolve(pmap, "remote_protocol"):
-            pairs.append(("remote_protocol", "HTTPS"))
+            pairs.append(("remote_protocol", body.remote_protocol or "HTTPS"))
     elif body.remote_port:
         pairs.append(("remote_port", body.remote_port))
     # al fijar clave admin, habilitar la cuenta si el modelo lo requiere

@@ -84,7 +84,7 @@ def _flatten(node: dict, prefix: str) -> list[dict]:
 _STATUS_KEYS = [
     "firmware", "uptime", "cpu", "mac", "wan_mode", "wan_ip", "wan_gateway",
     "pppoe_enable", "pppoe_user", "pppoe_password", "pppoe_status",
-    "remote_enable", "remote_port", "admin_user",
+    "remote_enable", "remote_port", "remote_protocol", "admin_user",
     "lan_ip", "dhcp_min", "dhcp_max",
     "wifi_2g_ssid", "wifi_2g_password", "wifi_2g_enable", "wifi_2g_channel", "wifi_2g_clients",
     "wifi_5g_ssid", "wifi_5g_password", "wifi_5g_enable", "wifi_5g_channel", "wifi_5g_clients",

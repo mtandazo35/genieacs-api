@@ -42,6 +42,7 @@ class PppoeIn(BaseModel):
 class AccessIn(BaseModel):
     remote_enable: Optional[bool] = None    # acceso remoto por WAN
     remote_port: Optional[int] = Field(None, ge=1, le=65535)
+    remote_protocol: Optional[str] = Field(None, pattern="^(HTTP|HTTPS)$")
     admin_user: Optional[str] = None        # usuario admin del equipo
     admin_password: Optional[str] = None     # nueva clave admin del equipo
 
