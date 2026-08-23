@@ -185,6 +185,7 @@ function renderStatus(st) {
       cell("PPPoE", st.pppoe_enable
         ? `${(st.pppoe_user || "").trim()} — ${st.pppoe_status === "Connected" ? "conectado" : "configurado (sin conexión)"}`
         : "inactivo"),
+      ...(st.pppoe_enable ? [pwCell("Clave PPPoE", st.pppoe_password)] : []),
     ]],
     ["Red local (LAN)", [
       cell("IP del router", st.lan_ip), cell("Rango DHCP", dhcp),
