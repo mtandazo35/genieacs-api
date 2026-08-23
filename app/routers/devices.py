@@ -48,18 +48,17 @@ async def _run_diag(device_id: str, prefix: str, inputs: dict, wait_s: int = 60)
     """Lanza un diagnostico TR-069 (Requested) y espera a que el CPE lo complete."""
     values = [[f"{prefix}.{k}", v, t] for k, (v, t) in inputs.items()]
     values.append([f"{prefix}.DiagnosticsState", "Requested", "xsd:string"])
-    await genie.set_parameter_values(device_id, values)
-    state = None
-    for _ in range(max(1, wait_s // 3)):
-        await asyncio.sleep(3)
+    await genie.set_parameter_values(device_id, values)   # el connection request lanza el test
+    state = "Requested"
+    for _ in range(max(1, wait_s // 5)):
+        await asyncio.sleep(5)
+        try:
+            await genie.refresh_object(device_id, prefix)   # traer estado/resultados frescos del CPE
+        except Exception:
+            pass
         doc = await genie.get_device(device_id, [prefix])
         state = _read(doc or {}, f"{prefix}.DiagnosticsState")
         if state and state not in ("Requested", "None"):
-            try:
-                await genie.refresh_object(device_id, prefix, connection_request=False)
-                await asyncio.sleep(2)
-            except Exception:
-                pass
             break
     return state or "Timeout"
 
