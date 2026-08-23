@@ -69,9 +69,47 @@ CONFIG_KEYS = [
 ]
 
 
+# Modelo TR-181 (raiz Device.), probado en TP-Link EX511.
+# WiFi: SSID y AccessPoint son instancias separadas ligadas por referencia.
+# Primaria 2.4G = SSID.1/AccessPoint.1 ; primaria 5G = SSID.3/AccessPoint.3.
+TR181 = {
+    "root": "Device",
+    "type": "xsd:string",
+    "params": {
+        "wifi_2g_ssid": "Device.WiFi.SSID.1.SSID",
+        "wifi_2g_password": "Device.WiFi.AccessPoint.1.Security.KeyPassphrase",
+        "wifi_2g_enable": ("Device.WiFi.SSID.1.Enable", "xsd:boolean"),
+        "wifi_2g_channel": ("Device.WiFi.Radio.1.Channel", "xsd:unsignedInt"),
+        "wifi_2g_clients": ("Device.WiFi.AccessPoint.1.AssociatedDeviceNumberOfEntries", "xsd:unsignedInt"),
+        "wifi_5g_ssid": "Device.WiFi.SSID.3.SSID",
+        "wifi_5g_password": "Device.WiFi.AccessPoint.3.Security.KeyPassphrase",
+        "wifi_5g_enable": ("Device.WiFi.SSID.3.Enable", "xsd:boolean"),
+        "wifi_5g_channel": ("Device.WiFi.Radio.2.Channel", "xsd:unsignedInt"),
+        "wifi_5g_clients": ("Device.WiFi.AccessPoint.3.AssociatedDeviceNumberOfEntries", "xsd:unsignedInt"),
+        "lan_ip": "Device.IP.Interface.1.IPv4Address.1.IPAddress",
+        "lan_mask": "Device.IP.Interface.1.IPv4Address.1.SubnetMask",
+        "pppoe_user": "Device.PPP.Interface.1.Username",
+        "pppoe_password": "Device.PPP.Interface.1.Password",
+        "pppoe_status": "Device.PPP.Interface.1.ConnectionStatus",
+        "tz": "Device.Time.LocalTimeZone",
+        "ntp1": "Device.Time.NTPServer1",
+        "ntp2": "Device.Time.NTPServer2",
+        "uptime": "Device.DeviceInfo.UpTime",
+        "firmware": "Device.DeviceInfo.SoftwareVersion",
+        "cpu": "Device.DeviceInfo.ProcessStatus.CPUUsage",
+        "mac": "Device.Ethernet.Interface.2.MACAddress",
+    },
+}
+
+
 def pick_map(device: dict) -> dict:
-    """Elige el mapa segun el modelo. Por ahora todo cae a TR098."""
-    # Aqui, a futuro: mirar DeviceInfo.Manufacturer/ProductClass y devolver otro mapa.
+    """Elige el mapa segun la raiz del arbol que reporta el equipo:
+    InternetGatewayDevice -> TR-098 ; Device -> TR-181."""
+    if isinstance(device, dict):
+        if "InternetGatewayDevice" in device:
+            return TR098
+        if "Device" in device:
+            return TR181
     return TR098
 
 

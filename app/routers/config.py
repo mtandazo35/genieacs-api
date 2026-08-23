@@ -83,6 +83,9 @@ async def set_wan(device_id: str, body: WanIn, dev=Depends(authorized_device)):
     OJO: cambiar mal la WAN puede dejar al equipo sin internet y sin contacto
     con el ACS. En estatico se exigen ip, mascara y gateway."""
     from .devices import active_wan_prefix
+    if pick_map(dev).get("root") != "InternetGatewayDevice":
+        raise HTTPException(400, "La configuración de WAN por ahora solo está soportada en equipos TR-098. "
+                                 "Para este equipo (TR-181) usa la pestaña Avanzado.")
     # --- PPPoE: se configura sobre WANPPPConnection.1 ---
     if body.mode == "pppoe":
         if not body.username:

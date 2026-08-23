@@ -49,8 +49,9 @@ async def authorized_device(device_id: str, user: CurrentUser = Depends(current_
 
     Admin -> cualquiera. ISP -> solo si el CPE lleva su tag.
     Devuelve el documento del device (con projection basica)."""
-    projection = ["_id", "_tags", "_deviceId", "InternetGatewayDevice.DeviceInfo.Manufacturer",
-                  "InternetGatewayDevice.DeviceInfo.ProductClass"]
+    projection = ["_id", "_tags", "_deviceId",
+                  "InternetGatewayDevice.DeviceInfo.Manufacturer",
+                  "Device.DeviceInfo.Manufacturer"]   # ambas raices para elegir TR-098/TR-181
     dev = await genie.get_device(device_id, projection)
     if not dev:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Dispositivo no encontrado")

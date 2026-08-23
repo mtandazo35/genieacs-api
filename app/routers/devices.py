@@ -220,10 +220,14 @@ _HOSTS_PREFIX = "InternetGatewayDevice.LANDevice.1.Hosts.Host"
 
 
 async def lan_hosts(device_id: str) -> list[dict]:
-    """Lista los clientes conectados (LAN hosts) que reporta el equipo."""
-    doc = await genie.get_device(device_id, [_HOSTS_PREFIX])
-    base = doc or {}
-    for part in _HOSTS_PREFIX.split("."):
+    """Lista los clientes conectados (LAN hosts). Sirve para TR-098 y TR-181."""
+    full = await genie.get_device(device_id)
+    if isinstance(full, dict) and "Device" in full and "InternetGatewayDevice" not in full:
+        prefix = "Device.Hosts.Host"
+    else:
+        prefix = _HOSTS_PREFIX
+    base = full or {}
+    for part in prefix.split("."):
         base = base.get(part) if isinstance(base, dict) else None
     out = []
     if not isinstance(base, dict):
@@ -231,14 +235,14 @@ async def lan_hosts(device_id: str) -> list[dict]:
     for k, v in base.items():
         if k.startswith("_") or not isinstance(v, dict):
             continue
-        iface = _val(v, "InterfaceType") or ""
+        iface = _val(v, "InterfaceType") or _val(v, "Layer1Interface") or ""
         out.append({
             "hostname": _val(v, "HostName"),
             "ip": _val(v, "IPAddress"),
-            "mac": _val(v, "MACAddress"),
+            "mac": _val(v, "MACAddress") or _val(v, "PhysAddress"),
             "active": _val(v, "Active"),
             "source": _val(v, "AddressSource"),
-            "iface": "WiFi" if "11" in str(iface) else ("Ethernet" if "Ethernet" in str(iface) else iface),
+            "iface": "WiFi" if ("11" in str(iface) or "WiFi" in str(iface)) else ("Ethernet" if "Ethernet" in str(iface) else iface),
         })
     # activos primero
     out.sort(key=lambda h: (not h.get("active"), str(h.get("ip") or "")))
@@ -270,9 +274,9 @@ async def active_wan_prefix(device_id: str) -> str:
 @router.get("/{device_id}/status")
 async def device_status(device_id: str, dev=Depends(authorized_device)):
     """Estado resumido leyendo la cache del ACS (no consulta al CPE)."""
-    pmap = pick_map(dev)
-    paths = [resolve(pmap, k)[0] for k in _STATUS_KEYS if resolve(pmap, k)]
-    full = await genie.get_device(device_id, paths + ["_tags", "_lastInform", "_deviceId"])
+    # arbol completo: sirve para detectar el modelo de datos (TR-098/TR-181) y leer cualquier path
+    full = await genie.get_device(device_id)
+    pmap = pick_map(full)
     did = full.get("_deviceId", {})
     meta = db.get_device_meta(device_id)
     result = {"id": device_id, "tags": full.get("_tags", []),
@@ -285,21 +289,26 @@ async def device_status(device_id: str, dev=Depends(authorized_device)):
         r = resolve(pmap, k)
         if r:
             result[k] = _read(full, r[0])
-    # sobreescribir WAN con la conexion realmente activa (no la instancia .1 fija)
-    try:
-        aw = await _active_wan(device_id)
-        if aw:
-            result["wan_mode"] = aw["mode"]
-            result["wan_ip"] = aw["ip"]
-            result["wan_gateway"] = aw["gw"]
-            if aw.get("mac"):
-                result["mac"] = aw["mac"]   # MAC WAN real (la de la conexion activa)
-            if aw.get("ppp"):
-                result["pppoe_enable"] = True
-                if aw.get("ppp_user"):
-                    result["pppoe_user"] = aw["ppp_user"]
-    except Exception:
-        pass
+    # sobreescribir WAN con la conexion realmente activa (solo TR-098; TR-181 usa otro modelo)
+    if pmap.get("root") == "InternetGatewayDevice":
+        try:
+            aw = await _active_wan(device_id)
+            if aw:
+                result["wan_mode"] = aw["mode"]
+                result["wan_ip"] = aw["ip"]
+                result["wan_gateway"] = aw["gw"]
+                if aw.get("mac"):
+                    result["mac"] = aw["mac"]   # MAC WAN real (la de la conexion activa)
+                if aw.get("ppp"):
+                    result["pppoe_enable"] = True
+                    if aw.get("ppp_user"):
+                        result["pppoe_user"] = aw["ppp_user"]
+        except Exception:
+            pass
+    else:
+        # TR-181: PPPoE segun ConnectionStatus del PPP.Interface
+        if result.get("pppoe_status") and result["pppoe_status"] != "Unconfigured":
+            result["pppoe_enable"] = result["pppoe_status"] in ("Connected", "Connecting", "Up")
     return result
 
 
