@@ -60,23 +60,22 @@ $("#login-form").addEventListener("submit", async (e) => {
 $("#logout").addEventListener("click", logout);
 
 // ===== Navegación =====
-$$("[data-nav]").forEach(a => a.addEventListener("click", (e) => {
-  e.preventDefault();
-  $$("[data-nav]").forEach(x => x.classList.remove("active"));
-  a.classList.add("active");
-  const nav = a.dataset.nav;
+function navigate(nav) {
+  $$("[data-nav]").forEach(x => x.classList.toggle("active", x.dataset.nav === nav));
   $("#devices-page").classList.toggle("hidden", nav !== "devices");
   $("#device-page").classList.add("hidden");
   $("#users-page").classList.toggle("hidden", nav !== "users");
   $("#settings-page").classList.toggle("hidden", nav !== "settings");
   $("#updates-page").classList.toggle("hidden", nav !== "updates");
   $("#account-page").classList.toggle("hidden", nav !== "account");
+  try { localStorage.setItem("view", nav); localStorage.removeItem("device"); } catch {}
   if (nav === "devices") loadDevices();
   if (nav === "users") loadUsers();
   if (nav === "settings") loadSettings();
   if (nav === "updates") loadUpdates();
   if (nav === "account") loadAccount();
-}));
+}
+$$("[data-nav]").forEach(a => a.addEventListener("click", (e) => { e.preventDefault(); navigate(a.dataset.nav); }));
 
 // ===== Equipos: lista =====
 async function loadDevices() {
@@ -119,6 +118,7 @@ $("#read-all").addEventListener("click", async () => {
 // ===== Equipos: detalle =====
 async function openDevice(id) {
   S.current = id;
+  try { localStorage.setItem("device", id); localStorage.setItem("view", "devices"); } catch {}
   $("#devices-page").classList.add("hidden");
   $("#users-page").classList.add("hidden");
   $("#device-page").classList.remove("hidden");
@@ -322,6 +322,7 @@ $("#wan-mode").addEventListener("change", () => {
 
 $$("[data-back]").forEach(b => b.addEventListener("click", () => {
   $("#device-page").classList.add("hidden"); $("#devices-page").classList.remove("hidden");
+  try { localStorage.removeItem("device"); } catch {}
 }));
 
 // resultado de una acción
@@ -572,99 +573,96 @@ $("#settings-form").addEventListener("submit", async (e) => {
   } catch (err) { toast(err.message, "err"); }
 });
 
-// ===== Actualizaciones / firmware (admin) =====
+// ===== Actualizaciones: Firmware y Respaldos separados (admin) =====
+const fileKind = f => { const t=(f.metadata&&f.metadata.fileType)||f.fileType||""; return t.startsWith("3")?"config":t.startsWith("2")?"web":"firmware"; };
+
 async function loadUpdates() {
   try {
     const files = await api("/firmware");
-    // tabla de firmwares
-    const tipo = f => { const t = (f.metadata && f.metadata.fileType) || f.fileType || ""; return t.startsWith("3") ? "Configuración" : t.startsWith("2") ? "Web" : t.startsWith("1") ? "Firmware" : (t || "-"); };
-    const sz = f => f.length ? (f.length / 1024 / 1024).toFixed(2) + " MB" : "-";
-    $("#fw-table tbody").innerHTML = files.length
-      ? files.map(f => {
-          const name = f._id || f.filename || f.name;
-          return `<tr><td>${esc(name)}</td><td>${esc(tipo(f))}</td><td>${sz(f)}</td>
-            <td><button class="ghost small" data-fwdel="${escAttr(name)}">Borrar</button></td></tr>`;
-        }).join("")
-      : `<tr><td colspan="4" class="muted">No hay archivos cargados.</td></tr>`;
-    // selector del envío masivo (muestra el tipo)
-    $("#fwp-file").innerHTML = files.length
-      ? files.map(f => { const n = f._id || f.filename || f.name; return `<option value="${escAttr(n)}">${esc(n)} — ${esc(tipo(f))}</option>`; }).join("")
-      : `<option value="">(sube un archivo primero)</option>`;
+    const sz = f => f.length ? (f.length/1024/1024).toFixed(2)+" MB" : "-";
+    for (const kind of ["firmware","config"]) {
+      const list = files.filter(f => fileKind(f) === kind);
+      const tbody = $(`table[data-list="${kind}"] tbody`);
+      if (tbody) tbody.innerHTML = list.length
+        ? list.map(f => { const n=f._id||f.filename||f.name; return `<tr><td>${esc(n)}</td><td>${sz(f)}</td><td><button class="ghost small" data-fwdel="${escAttr(n)}">Borrar</button></td></tr>`; }).join("")
+        : `<tr><td colspan="3" class="muted">No hay ${kind==="firmware"?"firmwares":"archivos"} cargados.</td></tr>`;
+      const sel = $(`.push-form[data-kind="${kind}"] .pf-file`);
+      if (sel) sel.innerHTML = list.length
+        ? list.map(f => { const n=f._id||f.filename||f.name; return `<option value="${escAttr(n)}">${esc(n)}</option>`; }).join("")
+        : `<option value="">(sube un archivo primero)</option>`;
+    }
   } catch (e) { toast(e.message, "err"); }
 }
 
-// subir por archivo
-$("#fw-upload-file").addEventListener("submit", async (e) => {
+// sub-tabs Firmware / Respaldos
+$$(".subtab").forEach(t => t.addEventListener("click", () => {
+  $$(".subtab").forEach(x => x.classList.remove("active")); t.classList.add("active");
+  $$("[data-subpanel]").forEach(p => p.classList.toggle("hidden", p.dataset.subpanel !== t.dataset.sub));
+}));
+
+// formularios de Actualizaciones (delegado; cubre firmware y config)
+document.addEventListener("submit", async (e) => {
+  const form = e.target;
+  if (!(form.classList && (form.classList.contains("up-file") || form.classList.contains("up-url") || form.classList.contains("push-form")))) return;
   e.preventDefault();
-  const f = $("#fwu-file").files[0];
-  if (!f) return toast("Elige un archivo", "err");
-  const fd = new FormData();
-  fd.append("file", f);
-  fd.append("file_type", $("#fwu-type").value);
-  fd.append("product_class", $("#fwu-model").value.trim());
-  fd.append("version", $("#fwu-version").value.trim());
-  fd.append("oui", $("#fwu-oui").value.trim());
+  const kind = form.dataset.kind;
   try {
-    const r = await api("/firmware/upload", { method: "POST", form: fd });
-    toast(`✓ Subido: ${r.file_name} (${(r.size/1024/1024).toFixed(1)} MB)`, "ok");
-    $("#fw-upload-file").reset(); loadUpdates();
+    if (form.classList.contains("up-file")) {
+      const f = form.querySelector(".uf-file").files[0];
+      if (!f) return toast("Elige un archivo", "err");
+      const fd = new FormData();
+      fd.append("file", f); fd.append("file_type", kind);
+      fd.append("product_class", form.querySelector(".uf-model").value.trim());
+      fd.append("version", form.querySelector(".uf-version").value.trim());
+      fd.append("oui", form.querySelector(".uf-oui").value.trim());
+      const r = await api("/firmware/upload", { method: "POST", form: fd });
+      toast(`✓ Subido: ${r.file_name} (${(r.size/1024/1024).toFixed(1)} MB)`, "ok");
+      form.reset(); loadUpdates();
+    } else if (form.classList.contains("up-url")) {
+      const body = { url: form.querySelector(".uu-url").value.trim(), file_name: form.querySelector(".uu-name").value.trim()||null, file_type: kind, product_class: form.querySelector(".uu-model").value.trim(), version: form.querySelector(".uu-version").value.trim() };
+      toast("Descargando desde el URL…", "info");
+      const r = await api("/firmware/upload-url", { method: "POST", body });
+      toast(`✓ Guardado: ${r.file_name} (${(r.size/1024/1024).toFixed(1)} MB)`, "ok");
+      form.reset(); loadUpdates();
+    } else if (form.classList.contains("push-form")) {
+      const file = form.querySelector(".pf-file").value;
+      if (!file) return toast("No hay archivo seleccionado", "err");
+      const target = form.querySelector(".pf-target").value;
+      const val = form.querySelector(".pf-value").value.trim();
+      if (target !== "all" && !val) return toast("Indica el valor del filtro", "err");
+      const body = { file_name: file };
+      if (target === "all") body.all = true;
+      if (target === "tag") body.tag = val;
+      if (target === "model") body.model = val;
+      if (!confirm("¿Enviar " + file + " a los equipos seleccionados?")) return;
+      const el = form.querySelector(".pf-result"); el.textContent = "Enviando…"; el.style.color = "var(--muted)";
+      try {
+        const r = await api("/firmware/push", { method: "POST", body });
+        el.textContent = `✓ ${r.detail} (fallidos: ${r.failed || 0})`; el.style.color = "var(--ok)";
+        toast("✓ Enviado a " + r.sent + " equipo(s)", "ok");
+        form.reset(); form.querySelector(".pf-value-wrap").classList.add("hidden");
+      } catch (err) { el.textContent = "✗ " + err.message; el.style.color = "var(--err)"; }
+    }
   } catch (err) { toast(err.message, "err"); }
 });
 
-// subir por URL
-$("#fw-upload-url").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const body = {
-    url: $("#fwurl-url").value.trim(),
-    file_name: $("#fwurl-name").value.trim() || null,
-    file_type: $("#fwurl-type").value,
-    product_class: $("#fwurl-model").value.trim(),
-    version: $("#fwurl-version").value.trim(),
-  };
-  toast("Descargando desde el URL…", "info");
-  try {
-    const r = await api("/firmware/upload-url", { method: "POST", body });
-    toast(`✓ Guardado: ${r.file_name} (${(r.size/1024/1024).toFixed(1)} MB)`, "ok");
-    $("#fw-upload-url").reset(); loadUpdates();
-  } catch (err) { toast(err.message, "err"); }
+// mostrar/ocultar el valor del filtro segun destino (delegado)
+document.addEventListener("change", (e) => {
+  const sel = e.target;
+  if (!(sel.classList && sel.classList.contains("pf-target"))) return;
+  const form = sel.closest(".push-form");
+  form.querySelector(".pf-value-wrap").classList.toggle("hidden", sel.value === "all");
+  form.querySelector(".pf-value").placeholder = sel.value === "tag" ? "tag del ISP (p.ej. altala)" : "modelo (p.ej. WR3000 V1.0)";
 });
 
-// borrar firmware
+// borrar archivo
 document.addEventListener("click", async (e) => {
   const b = e.target.closest("[data-fwdel]");
   if (!b) return;
   const name = b.dataset.fwdel;
-  if (!confirm("¿Borrar el firmware " + name + "?")) return;
+  if (!confirm("¿Borrar el archivo " + name + "?")) return;
   try { await api(`/firmware/${encodeURIComponent(name)}`, { method: "DELETE" }); toast("Borrado", "ok"); loadUpdates(); }
   catch (err) { toast(err.message, "err"); }
-});
-
-// mostrar/ocultar el campo de valor según destino
-$("#fwp-target").addEventListener("change", () => {
-  const v = $("#fwp-target").value;
-  $("#fwp-value-wrap").classList.toggle("hidden", v === "all");
-  $("#fwp-value").placeholder = v === "tag" ? "tag del ISP (p.ej. altala)" : "modelo (p.ej. WR3000 V1.0)";
-});
-
-// enviar masivo
-$("#fw-push").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const file = $("#fwp-file").value;
-  if (!file) return toast("No hay firmware seleccionado", "err");
-  const target = $("#fwp-target").value;
-  const val = $("#fwp-value").value.trim();
-  if (target !== "all" && !val) return toast("Indica el valor del filtro", "err");
-  const body = { file_name: file };
-  if (target === "all") body.all = true;
-  if (target === "tag") body.tag = val;
-  if (target === "model") body.model = val;
-  if (!confirm("¿Enviar " + file + " a los equipos seleccionados?")) return;
-  const el = $("#fwp-result"); el.textContent = "Enviando…"; el.style.color = "var(--muted)";
-  try {
-    const r = await api("/firmware/push", { method: "POST", body });
-    el.textContent = `✓ ${r.detail} (fallidos: ${r.failed || 0})`; el.style.color = "var(--ok)";
-    toast("✓ Actualización enviada a " + r.sent + " equipo(s)", "ok");
-  } catch (err) { el.textContent = "✗ " + err.message; el.style.color = "var(--err)"; }
 });
 
 // ===== Utilidades de formato =====
@@ -687,7 +685,12 @@ async function boot() {
   $("#nav-settings").classList.toggle("hidden", S.role !== "admin");
   $("#nav-updates").classList.toggle("hidden", S.role !== "admin");
   $("#who").textContent = S.isp ? `ISP: ${S.isp}` : (S.role === "admin" ? "Administrador" : "");
-  loadDevices();
+  // restaurar la ultima vista (y equipo) en vez de volver siempre a Equipos
+  let view = "devices", dev = null;
+  try { view = localStorage.getItem("view") || "devices"; dev = localStorage.getItem("device"); } catch {}
+  if (["updates", "users", "settings"].includes(view) && S.role !== "admin") view = "devices";
+  navigate(view);
+  if (dev) openDevice(dev);
 }
 
 if (S.token) { boot().catch(() => showLogin()); } else { showLogin(); }

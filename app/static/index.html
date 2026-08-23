@@ -231,56 +231,99 @@
       </form>
     </section>
 
-    <!-- Actualizaciones / firmware (solo admin) -->
+    <!-- Actualizaciones (solo admin): Firmware y Respaldos separados -->
     <section id="updates-page" class="hidden">
       <div class="page-head"><h2>Actualizaciones</h2></div>
-
-      <div class="two-col">
-        <form id="fw-upload-file" class="card-form">
-          <h3>Cargar archivo (subir)</h3>
-          <label>Tipo<select id="fwu-type"><option value="firmware">Firmware</option><option value="config">Configuración (Vendor Config)</option></select></label>
-          <label>Archivo<input id="fwu-file" type="file" required></label>
-          <div class="row">
-            <label>Modelo (ProductClass)<input id="fwu-model" placeholder="opcional"></label>
-            <label>Versión<input id="fwu-version" placeholder="opcional"></label>
-          </div>
-          <label>OUI<input id="fwu-oui" placeholder="opcional"></label>
-          <button type="submit">Subir archivo</button>
-        </form>
-
-        <form id="fw-upload-url" class="card-form">
-          <h3>Cargar archivo (URL)</h3>
-          <label>Tipo<select id="fwurl-type"><option value="firmware">Firmware</option><option value="config">Configuración (Vendor Config)</option></select></label>
-          <label>URL del archivo<input id="fwurl-url" placeholder="https://…/archivo.bin" required></label>
-          <label>Nombre del archivo<input id="fwurl-name" placeholder="opcional (por defecto el del URL)"></label>
-          <div class="row">
-            <label>Modelo<input id="fwurl-model" placeholder="opcional"></label>
-            <label>Versión<input id="fwurl-version" placeholder="opcional"></label>
-          </div>
-          <button type="submit">Descargar y guardar</button>
+      <div class="subtabs">
+        <button class="subtab active" data-sub="firmware">Firmware</button>
+        <button class="subtab" data-sub="config">Respaldos / Configuración</button>
+      </div>
+      <div data-subpanel="firmware">
+        <div class="two-col">
+          <form class="card-form up-file" data-kind="firmware">
+            <h3>Subir firmware (archivo)</h3>
+            <label>Archivo<input type="file" class="uf-file" required></label>
+            <div class="row">
+              <label>Modelo (ProductClass)<input class="uf-model" placeholder="opcional"></label>
+              <label>Versión<input class="uf-version" placeholder="opcional"></label>
+            </div>
+            <label>OUI<input class="uf-oui" placeholder="opcional"></label>
+            <button type="submit">Subir</button>
+          </form>
+          <form class="card-form up-url" data-kind="firmware">
+            <h3>Subir firmware (URL)</h3>
+            <label>URL<input class="uu-url" placeholder="https://…/firmware.bin" required></label>
+            <label>Nombre del archivo<input class="uu-name" placeholder="opcional (por defecto el del URL)"></label>
+            <div class="row">
+              <label>Modelo<input class="uu-model" placeholder="opcional"></label>
+              <label>Versión<input class="uu-version" placeholder="opcional"></label>
+            </div>
+            <button type="submit">Descargar y guardar</button>
+          </form>
+        </div>
+        <div class="card-form">
+          <h3>Firmwares cargados</h3>
+          <table class="tbl" data-list="firmware"><thead><tr><th>Archivo</th><th>Tamaño</th><th></th></tr></thead><tbody></tbody></table>
+        </div>
+        <form class="card-form push-form" data-kind="firmware">
+          <h3>Enviar firmware (masivo)</h3>
+          <label>Archivo<select class="pf-file"></select></label>
+          <label>Destino
+            <select class="pf-target">
+              <option value="all">Toda la flota</option>
+              <option value="tag">Por ISP (tag)</option>
+              <option value="model">Por modelo</option>
+            </select>
+          </label>
+          <label class="pf-value-wrap hidden">Valor del filtro<input class="pf-value" placeholder="tag del ISP o modelo"></label>
+          <button type="submit" class="warn">Enviar a los equipos</button>
+          <p class="muted small">La descarga se encola; cada equipo la aplica en su próximo reporte. Para un solo equipo, usa la pestaña dentro del equipo.</p>
+          <div class="pf-result small"></div>
         </form>
       </div>
-
-      <div class="card-form">
-        <h3>Archivos cargados</h3>
-        <table class="tbl" id="fw-table"><thead><tr><th>Archivo</th><th>Tipo</th><th>Tamaño</th><th></th></tr></thead><tbody></tbody></table>
+      <div data-subpanel="config" class="hidden">
+        <div class="two-col">
+          <form class="card-form up-file" data-kind="config">
+            <h3>Subir configuración (archivo)</h3>
+            <label>Archivo<input type="file" class="uf-file" required></label>
+            <div class="row">
+              <label>Modelo (ProductClass)<input class="uf-model" placeholder="opcional"></label>
+              <label>Versión<input class="uf-version" placeholder="opcional"></label>
+            </div>
+            <label>OUI<input class="uf-oui" placeholder="opcional"></label>
+            <button type="submit">Subir</button>
+          </form>
+          <form class="card-form up-url" data-kind="config">
+            <h3>Subir configuración (URL)</h3>
+            <label>URL<input class="uu-url" placeholder="https://…/config.bin" required></label>
+            <label>Nombre del archivo<input class="uu-name" placeholder="opcional (por defecto el del URL)"></label>
+            <div class="row">
+              <label>Modelo<input class="uu-model" placeholder="opcional"></label>
+              <label>Versión<input class="uu-version" placeholder="opcional"></label>
+            </div>
+            <button type="submit">Descargar y guardar</button>
+          </form>
+        </div>
+        <div class="card-form">
+          <h3>Archivos de configuración cargados</h3>
+          <table class="tbl" data-list="config"><thead><tr><th>Archivo</th><th>Tamaño</th><th></th></tr></thead><tbody></tbody></table>
+        </div>
+        <form class="card-form push-form" data-kind="config">
+          <h3>Enviar configuración (masivo)</h3>
+          <label>Archivo<select class="pf-file"></select></label>
+          <label>Destino
+            <select class="pf-target">
+              <option value="all">Toda la flota</option>
+              <option value="tag">Por ISP (tag)</option>
+              <option value="model">Por modelo</option>
+            </select>
+          </label>
+          <label class="pf-value-wrap hidden">Valor del filtro<input class="pf-value" placeholder="tag del ISP o modelo"></label>
+          <button type="submit" class="warn">Enviar a los equipos</button>
+          <p class="muted small">La descarga se encola; cada equipo la aplica en su próximo reporte. Para un solo equipo, usa la pestaña dentro del equipo.</p>
+          <div class="pf-result small"></div>
+        </form>
       </div>
-
-      <form id="fw-push" class="card-form">
-        <h3>Enviar a equipos (masivo)</h3>
-        <label>Firmware<select id="fwp-file"></select></label>
-        <label>Destino
-          <select id="fwp-target">
-            <option value="all">Toda la flota</option>
-            <option value="tag">Por ISP (tag)</option>
-            <option value="model">Por modelo</option>
-          </select>
-        </label>
-        <label id="fwp-value-wrap" class="hidden">Valor del filtro<input id="fwp-value" placeholder="tag del ISP o modelo"></label>
-        <button type="submit" class="warn">Enviar a los equipos</button>
-        <p class="muted small">La descarga se encola; cada equipo la aplica en su próximo reporte. Para enviar a un solo equipo, usa la pestaña Firmware dentro del equipo.</p>
-        <div id="fwp-result" class="small"></div>
-      </form>
     </section>
 
     <!-- Ajustes: conexión al ACS (solo admin) -->
