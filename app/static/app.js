@@ -142,17 +142,55 @@ async function readDevice(silent) {
   finally { btn.disabled = false; btn.textContent = prev; }
 }
 
+function cell(k, v) {
+  return `<div class="cell"><div class="k">${esc(k)}</div><div class="v">${esc(v != null && v !== "" ? String(v) : "-")}</div></div>`;
+}
+function pwCell(k, v) {
+  if (v == null || v === "") return cell(k, "-");
+  return `<div class="cell"><div class="k">${esc(k)}</div><div class="v pw">
+    <span class="pw-val" data-pw="${escAttr(v)}">••••••••</span>
+    <button class="eye" type="button" title="Mostrar/ocultar">👁</button></div></div>`;
+}
+function onoff(v) { return v === true ? "Encendido" : v === false ? "Apagado" : "-"; }
+
 function renderStatus(st) {
   $("#dev-tags").innerHTML = visibleTags(st.tags).map(t => `<span class="tag">${esc(t)}</span>`).join("");
-  const cells = [
-    ["Firmware", st.firmware], ["Uptime", fmtUptime(st.uptime)], ["CPU", st.cpu != null ? st.cpu + "%" : "-"],
-    ["IP WAN", st.wan_ip], ["IP LAN", st.lan_ip], ["SSID 2.4G", st.wifi_2g_ssid],
-    ["SSID 5G", st.wifi_5g_ssid], ["PPPoE", st.pppoe_enable ? "activo (" + (st.pppoe_user || "").trim() + ")" : "inactivo"],
-    ["Último reporte", fmtDate(st.last_inform)],
+  const dhcp = (st.dhcp_min || st.dhcp_max) ? `${st.dhcp_min || "?"} – ${st.dhcp_max || "?"}` : null;
+  const sections = [
+    ["Dispositivo", [
+      cell("Modelo", st.model), cell("Serial", st.serial), cell("Firmware", st.firmware),
+      cell("Uptime", st.uptime != null ? fmtUptime(st.uptime) : null),
+      cell("CPU", st.cpu != null ? st.cpu + "%" : null),
+      cell("Último reporte", fmtDate(st.last_inform)),
+    ]],
+    ["Internet (WAN)", [
+      cell("IP WAN", st.wan_ip),
+      cell("PPPoE", st.pppoe_enable ? "activo (" + (st.pppoe_user || "").trim() + ")" : "inactivo"),
+    ]],
+    ["Red local (LAN)", [
+      cell("IP del router", st.lan_ip), cell("Rango DHCP", dhcp),
+    ]],
+    ["WiFi 2.4 GHz", [
+      cell("SSID", st.wifi_2g_ssid), pwCell("Clave", st.wifi_2g_password),
+      cell("Canal", st.wifi_2g_channel), cell("Radio", onoff(st.wifi_2g_enable)),
+    ]],
+    ["WiFi 5 GHz", [
+      cell("SSID", st.wifi_5g_ssid), pwCell("Clave", st.wifi_5g_password),
+      cell("Canal", st.wifi_5g_channel), cell("Radio", onoff(st.wifi_5g_enable)),
+    ]],
   ];
-  $("#dev-status").innerHTML = cells.map(([k, v]) =>
-    `<div class="cell"><div class="k">${k}</div><div class="v">${esc(v != null && v !== "" ? String(v) : "-")}</div></div>`).join("");
+  $("#dev-status").innerHTML = sections.map(([title, cells]) =>
+    `<div class="section"><h4>${esc(title)}</h4><div class="section-grid">${cells.join("")}</div></div>`).join("");
 }
+
+// mostrar/ocultar claves
+document.addEventListener("click", (e) => {
+  const b = e.target.closest(".eye");
+  if (!b) return;
+  const span = b.previousElementSibling;
+  if (span.textContent === "••••••••") span.textContent = span.dataset.pw;
+  else span.textContent = "••••••••";
+});
 
 function prefillForms(st) {
   $("#wifi-band").value = "2g";

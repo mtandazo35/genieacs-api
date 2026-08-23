@@ -7,8 +7,12 @@ from ..parammap import pick_map, resolve
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
-_STATUS_KEYS = ["firmware", "uptime", "cpu", "wan_ip", "wifi_2g_ssid", "wifi_5g_ssid",
-                "lan_ip", "pppoe_enable", "pppoe_user"]
+_STATUS_KEYS = [
+    "firmware", "uptime", "cpu", "wan_ip", "pppoe_enable", "pppoe_user",
+    "lan_ip", "dhcp_min", "dhcp_max",
+    "wifi_2g_ssid", "wifi_2g_password", "wifi_2g_enable", "wifi_2g_channel",
+    "wifi_5g_ssid", "wifi_5g_password", "wifi_5g_enable", "wifi_5g_channel",
+]
 
 
 @router.get("")
@@ -49,8 +53,13 @@ async def device_status(device_id: str, dev=Depends(authorized_device)):
     """Estado resumido leyendo la cache del ACS (no consulta al CPE)."""
     pmap = pick_map(dev)
     paths = [resolve(pmap, k)[0] for k in _STATUS_KEYS if resolve(pmap, k)]
-    full = await genie.get_device(device_id, paths + ["_tags", "_lastInform"])
-    result = {"id": device_id, "tags": full.get("_tags", []), "last_inform": full.get("_lastInform")}
+    full = await genie.get_device(device_id, paths + ["_tags", "_lastInform", "_deviceId"])
+    did = full.get("_deviceId", {})
+    result = {"id": device_id, "tags": full.get("_tags", []),
+              "last_inform": full.get("_lastInform"),
+              "manufacturer": did.get("_Manufacturer"),
+              "model": did.get("_ProductClass"),
+              "serial": did.get("_SerialNumber")}
     for k in _STATUS_KEYS:
         r = resolve(pmap, k)
         if r:
