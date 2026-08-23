@@ -122,6 +122,9 @@ async def clear_schedule(device_id: str, dev=Depends(authorized_device)):
 # --- firmware: envio individual (1 a 1). Gestion/masivo en routers/firmware.py
 @router.post("/devices/{device_id}/firmware", response_model=ActionResult)
 async def push_firmware(device_id: str, body: FirmwarefromServer, dev=Depends(authorized_device)):
-    res = await genie.download(device_id, body.file_name)
+    from .firmware import file_type_of
+    ftype = await file_type_of(body.file_name)
+    res = await genie.download(device_id, body.file_name, file_type=ftype)
+    kind = "Configuracion" if ftype.startswith("3") else "Firmware"
     return ActionResult(applied=res["applied"], queued=res["queued"],
-                        detail=f"Descarga de {body.file_name} enviada")
+                        detail=f"{kind} '{body.file_name}' enviado")

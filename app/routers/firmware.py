@@ -24,11 +24,30 @@ from ..genieacs import genie
 router = APIRouter(prefix="/firmware", tags=["firmware"])
 
 FILE_TYPE = "1 Firmware Upgrade Image"
+# tipos soportados (alias corto -> string TR-069)
+FT = {
+    "firmware": "1 Firmware Upgrade Image",
+    "config": "3 Vendor Configuration File",
+    "web": "2 Web Content",
+}
+
+
+def _ft(alias: str) -> str:
+    return FT.get((alias or "firmware").lower(), FILE_TYPE)
+
+
+async def file_type_of(file_name: str) -> str:
+    """Devuelve el fileType TR-069 de un archivo ya cargado (por su metadata)."""
+    for f in await genie.list_files():
+        if (f.get("_id") or f.get("filename")) == file_name:
+            return (f.get("metadata") or {}).get("fileType") or FILE_TYPE
+    return FILE_TYPE
 
 
 class UploadUrlIn(BaseModel):
-    url: str = Field(..., description="URL directa del archivo de firmware")
+    url: str = Field(..., description="URL directa del archivo")
     file_name: Optional[str] = Field(None, description="Nombre con que se guarda (por defecto, el del URL)")
+    file_type: str = Field("firmware", description="firmware | config | web")
     product_class: str = ""
     oui: str = ""
     version: str = ""
@@ -51,6 +70,7 @@ async def list_firmware(user: CurrentUser = Depends(current_user)):
 @router.post("/upload", dependencies=[Depends(require_admin)])
 async def upload_firmware(
     file: UploadFile = File(...),
+    file_type: str = Form("firmware"),
     product_class: str = Form(""),
     oui: str = Form(""),
     version: str = Form(""),
@@ -58,9 +78,9 @@ async def upload_firmware(
     content = await file.read()
     if not content:
         raise HTTPException(400, "Archivo vacio")
-    await genie.upload_file(file.filename, content, FILE_TYPE,
+    await genie.upload_file(file.filename, content, _ft(file_type),
                             oui=oui, product_class=product_class, version=version)
-    return {"ok": True, "file_name": file.filename, "size": len(content)}
+    return {"ok": True, "file_name": file.filename, "size": len(content), "type": _ft(file_type)}
 
 
 @router.post("/upload-url", dependencies=[Depends(require_admin)])
@@ -81,9 +101,9 @@ async def upload_firmware_url(body: UploadUrlIn):
         raise HTTPException(400, f"Error descargando: {type(e).__name__}: {e}")
     if not content:
         raise HTTPException(400, "El URL no devolvio contenido")
-    await genie.upload_file(name, content, FILE_TYPE,
+    await genie.upload_file(name, content, _ft(body.file_type),
                             oui=body.oui, product_class=body.product_class, version=body.version)
-    return {"ok": True, "file_name": name, "size": len(content), "source": body.url}
+    return {"ok": True, "file_name": name, "size": len(content), "source": body.url, "type": _ft(body.file_type)}
 
 
 @router.delete("/{file_name:path}", dependencies=[Depends(require_admin)])
@@ -100,12 +120,14 @@ async def push_firmware_bulk(body: PushIn, user: CurrentUser = Depends(current_u
     targets = await resolve_targets(user, tag=body.tag, model=body.model, device_ids=body.device_ids)
     if not targets:
         return {"ok": True, "sent": 0, "detail": "Ningun equipo coincide con el filtro"}
+    ftype = await file_type_of(body.file_name)   # firmware o config, segun el archivo
     ok, fail = 0, []
     for dev_id in targets:
         try:
-            await genie.download(dev_id, body.file_name, connection_request=False)
+            await genie.download(dev_id, body.file_name, file_type=ftype, connection_request=False)
             ok += 1
         except Exception as e:
             fail.append({"device": dev_id, "error": str(e)})
+    kind = "Configuracion" if ftype.startswith("3") else "Actualizacion"
     return {"ok": True, "sent": ok, "failed": len(fail), "errors": fail[:20],
-            "detail": f"Actualizacion encolada en {ok} equipo(s); se aplica en su proximo reporte."}
+            "detail": f"{kind} encolada en {ok} equipo(s); se aplica en su proximo reporte."}

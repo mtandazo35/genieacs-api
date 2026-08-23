@@ -237,7 +237,8 @@
 
       <div class="two-col">
         <form id="fw-upload-file" class="card-form">
-          <h3>Cargar firmware (archivo)</h3>
+          <h3>Cargar archivo (subir)</h3>
+          <label>Tipo<select id="fwu-type"><option value="firmware">Firmware</option><option value="config">Configuración (Vendor Config)</option></select></label>
           <label>Archivo<input id="fwu-file" type="file" required></label>
           <div class="row">
             <label>Modelo (ProductClass)<input id="fwu-model" placeholder="opcional"></label>
@@ -248,8 +249,9 @@
         </form>
 
         <form id="fw-upload-url" class="card-form">
-          <h3>Cargar firmware (URL)</h3>
-          <label>URL del firmware<input id="fwurl-url" placeholder="https://…/firmware.bin" required></label>
+          <h3>Cargar archivo (URL)</h3>
+          <label>Tipo<select id="fwurl-type"><option value="firmware">Firmware</option><option value="config">Configuración (Vendor Config)</option></select></label>
+          <label>URL del archivo<input id="fwurl-url" placeholder="https://…/archivo.bin" required></label>
           <label>Nombre del archivo<input id="fwurl-name" placeholder="opcional (por defecto el del URL)"></label>
           <div class="row">
             <label>Modelo<input id="fwurl-model" placeholder="opcional"></label>
@@ -260,12 +262,12 @@
       </div>
 
       <div class="card-form">
-        <h3>Firmwares cargados</h3>
-        <table class="tbl" id="fw-table"><thead><tr><th>Archivo</th><th>Tipo</th><th></th></tr></thead><tbody></tbody></table>
+        <h3>Archivos cargados</h3>
+        <table class="tbl" id="fw-table"><thead><tr><th>Archivo</th><th>Tipo</th><th>Tamaño</th><th></th></tr></thead><tbody></tbody></table>
       </div>
 
       <form id="fw-push" class="card-form">
-        <h3>Enviar actualización (masivo)</h3>
+        <h3>Enviar a equipos (masivo)</h3>
         <label>Firmware<select id="fwp-file"></select></label>
         <label>Destino
           <select id="fwp-target">

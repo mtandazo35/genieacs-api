@@ -577,17 +577,19 @@ async function loadUpdates() {
   try {
     const files = await api("/firmware");
     // tabla de firmwares
+    const tipo = f => { const t = (f.metadata && f.metadata.fileType) || f.fileType || ""; return t.startsWith("3") ? "Configuración" : t.startsWith("2") ? "Web" : t.startsWith("1") ? "Firmware" : (t || "-"); };
+    const sz = f => f.length ? (f.length / 1024 / 1024).toFixed(2) + " MB" : "-";
     $("#fw-table tbody").innerHTML = files.length
       ? files.map(f => {
           const name = f._id || f.filename || f.name;
-          return `<tr><td>${esc(name)}</td><td>${esc((f.metadata && f.metadata.fileType) || f.fileType || "-")}</td>
+          return `<tr><td>${esc(name)}</td><td>${esc(tipo(f))}</td><td>${sz(f)}</td>
             <td><button class="ghost small" data-fwdel="${escAttr(name)}">Borrar</button></td></tr>`;
         }).join("")
-      : `<tr><td colspan="3" class="muted">No hay firmwares cargados.</td></tr>`;
-    // selector del envío masivo
+      : `<tr><td colspan="4" class="muted">No hay archivos cargados.</td></tr>`;
+    // selector del envío masivo (muestra el tipo)
     $("#fwp-file").innerHTML = files.length
-      ? files.map(f => { const n = f._id || f.filename || f.name; return `<option value="${escAttr(n)}">${esc(n)}</option>`; }).join("")
-      : `<option value="">(sube un firmware primero)</option>`;
+      ? files.map(f => { const n = f._id || f.filename || f.name; return `<option value="${escAttr(n)}">${esc(n)} — ${esc(tipo(f))}</option>`; }).join("")
+      : `<option value="">(sube un archivo primero)</option>`;
   } catch (e) { toast(e.message, "err"); }
 }
 
@@ -598,6 +600,7 @@ $("#fw-upload-file").addEventListener("submit", async (e) => {
   if (!f) return toast("Elige un archivo", "err");
   const fd = new FormData();
   fd.append("file", f);
+  fd.append("file_type", $("#fwu-type").value);
   fd.append("product_class", $("#fwu-model").value.trim());
   fd.append("version", $("#fwu-version").value.trim());
   fd.append("oui", $("#fwu-oui").value.trim());
@@ -614,6 +617,7 @@ $("#fw-upload-url").addEventListener("submit", async (e) => {
   const body = {
     url: $("#fwurl-url").value.trim(),
     file_name: $("#fwurl-name").value.trim() || null,
+    file_type: $("#fwurl-type").value,
     product_class: $("#fwurl-model").value.trim(),
     version: $("#fwurl-version").value.trim(),
   };
