@@ -412,7 +412,10 @@ const actions = {
       if ($("#wan-mtu").value) body.mtu = +$("#wan-mtu").value;
       if (!body.ip || !body.mask || !body.gateway) return toast("IP, máscara y gateway son obligatorios en estático", "err");
     }
-    if (!confirm("¿Aplicar configuración WAN (" + mode + ")? Un error puede dejar el equipo sin conexión.")) return;
+    const aviso = mode === "static"
+      ? "⚠ VAS A PONER IP ESTÁTICA EN LA WAN.\n\nLa IP debe ser de la MISMA red por la que el equipo llega al ACS, o perderás la gestión remota y habrá que ir al sitio.\n\n¿Continuar?"
+      : "¿Aplicar WAN por DHCP?";
+    if (!confirm(aviso)) return;
     const r = await api(`/devices/${enc(S.current)}/wan`, { method: "PUT", body });
     report(r); refreshAfterChange(r);
     clearInputs("wan-ip", "wan-mask", "wan-gw", "wan-dns", "wan-mtu");

@@ -1,4 +1,6 @@
 """Configuracion del CPE: WiFi, IP/DHCP, DNS, PPPoE, hora/fecha."""
+import ipaddress
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..deps import authorized_device
@@ -87,6 +89,18 @@ async def set_wan(device_id: str, body: WanIn, dev=Depends(authorized_device)):
     else:
         if not (body.ip and body.mask and body.gateway):
             raise HTTPException(400, "En modo estatico se requieren ip, mask y gateway")
+        # validacion de seguridad: IP/gateway validos y en la misma subred
+        try:
+            net = ipaddress.IPv4Network(f"{body.ip}/{body.mask}", strict=False)
+            ip_addr = ipaddress.IPv4Address(body.ip)
+            gw_addr = ipaddress.IPv4Address(body.gateway)
+        except Exception:
+            raise HTTPException(400, "IP, mascara o gateway invalidos")
+        if gw_addr not in net:
+            raise HTTPException(400, f"El gateway {body.gateway} no esta en la misma red que la IP "
+                                     f"{body.ip}/{body.mask} ({net}). Corrige los datos o perderas el enlace.")
+        if ip_addr == gw_addr:
+            raise HTTPException(400, "La IP y el gateway no pueden ser iguales")
         values = [
             [f"{prefix}.AddressingType", "Static", "xsd:string"],
             [f"{prefix}.ExternalIPAddress", body.ip, "xsd:string"],
