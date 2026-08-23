@@ -153,6 +153,8 @@ async def set_param(device_id: str, body: ParamIn, dev=Depends(authorized_device
     """Escribe un parametro arbitrario del arbol (avanzado)."""
     triple = [body.path, body.value] + ([body.type] if body.type else [])
     res = await genie.set_parameter_values(device_id, [triple])
+    from .backup import merge_device_config
+    merge_device_config(device_id, [triple])   # mantener el respaldo al dia
     return {"ok": True, **res}
 
 

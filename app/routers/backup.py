@@ -26,6 +26,28 @@ class AutoRestoreIn(BaseModel):
     enabled: bool
 
 
+def merge_device_config(device_id: str, pairs: list) -> None:
+    """Fusiona cambios recien aplicados en el respaldo, para que nunca quede viejo.
+
+    pairs: lista de [path, value] o [path, value, type]. Solo actualiza si el
+    equipo YA tiene respaldo o auto-restauracion activa (si no, no crea nada)."""
+    row = db.get_device_config(device_id)
+    if not row or (not row.get("config") and not row.get("autorestore")):
+        return
+    try:
+        cfg = json.loads(row["config"]) if row.get("config") else {}
+    except Exception:
+        cfg = {}
+    for p in pairs:
+        if not p or p[1] is None:
+            continue
+        path = p[0]
+        value = p[1]
+        typ = p[2] if len(p) > 2 else None
+        cfg[path] = [value, typ]
+    db.save_device_config(device_id, json.dumps(cfg))
+
+
 def _read_path(doc: dict, path: str):
     node = doc
     for part in path.split("."):

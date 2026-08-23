@@ -5,6 +5,7 @@ from ..deps import authorized_device
 from ..genieacs import genie
 from ..parammap import pick_map, resolve
 from ..schemas import ActionResult, DnsIn, IpIn, PppoeIn, TimeIn, WanIn, WifiIn
+from .backup import merge_device_config
 
 router = APIRouter(prefix="/devices/{device_id}", tags=["config"])
 
@@ -32,6 +33,7 @@ async def _apply(device_id: str, pmap: dict, pairs: list[tuple[str, object]]) ->
     if not values:
         raise HTTPException(400, f"Nada que aplicar. No soportado por el modelo: {unsupported}")
     res = await genie.set_parameter_values(device_id, values)
+    merge_device_config(device_id, values)   # mantener el respaldo al dia
     detail = None if not unsupported else f"Ignorados (no soportados): {unsupported}"
     return ActionResult(applied=res["applied"], queued=res["queued"], detail=detail)
 
