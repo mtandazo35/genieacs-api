@@ -89,12 +89,14 @@ function renderDevices() {
   const q = $("#filter").value.toLowerCase();
   const list = $("#device-list");
   const items = S.devices.filter(d =>
-    !q || (d.id + " " + (d.model || "") + " " + (d.manufacturer || "") + " " + (d.tags || []).join(" ")).toLowerCase().includes(q));
+    !q || (d.id + " " + (d.name || "") + " " + (d.customer || "") + " " + (d.model || "") + " " + (d.manufacturer || "") + " " + (d.tags || []).join(" ")).toLowerCase().includes(q));
   $("#device-empty").classList.toggle("hidden", S.devices.length > 0);
   list.innerHTML = items.map(d => {
     const online = isRecent(d.last_inform);
+    const title = d.name || `${d.manufacturer || "?"} ${d.model || ""}`.trim();
     return `<div class="dev-card" data-id="${escAttr(d.id)}">
-      <h3><span class="dot ${online ? "on" : "off"}"></span>${esc(d.manufacturer || "?")} </h3>
+      <h3><span class="dot ${online ? "on" : "off"}"></span>${esc(title)}</h3>
+      ${d.customer ? `<div class="model">👤 ${esc(d.customer)}</div>` : ""}
       <div class="model">${esc(d.model || "modelo ?")}</div>
       <div class="meta">FW: ${esc(d.firmware || "-")}<br>Último reporte: ${fmtDate(d.last_inform)}<br>${visibleTags(d.tags).map(t => `#${esc(t)}`).join(" ")}</div>
     </div>`;
@@ -170,6 +172,15 @@ function onoff(v) { return v === true ? "Encendido" : v === false ? "Apagado" : 
 let lastStatus = null;
 function renderStatus(st) {
   lastStatus = st;
+  // encabezado: nombre / cliente
+  const parts = [];
+  if (st.name) parts.push("<b>" + esc(st.name) + "</b>");
+  if (st.customer) parts.push("👤 " + esc(st.customer));
+  if (st.notes) parts.push(esc(st.notes));
+  $("#dev-label-view").innerHTML = parts.length ? parts.join(" · ") : "Sin nombre/cliente asignado";
+  $("#label-name").value = st.name || "";
+  $("#label-customer").value = st.customer || "";
+  $("#label-notes").value = st.notes || "";
   $("#dev-tags").innerHTML = visibleTags(st.tags).map(t => `<span class="tag">${esc(t)}</span>`).join("");
   const dhcp = (st.dhcp_min || st.dhcp_max) ? `${st.dhcp_min || "?"} – ${st.dhcp_max || "?"}` : null;
   const sections = [
@@ -219,6 +230,19 @@ function prefillForms(st) {
   $("#wifi-ssid").value = ""; $("#wifi-pass").value = "";
   $("#net-ip").value = ""; $("#net-mask").value = "";
 }
+
+// editar nombre / cliente del equipo
+$("#label-edit").addEventListener("click", () => { $("#label-form").classList.remove("hidden"); $("#dev-label-view").classList.add("hidden"); $("#label-edit").classList.add("hidden"); });
+$("#label-cancel").addEventListener("click", () => { $("#label-form").classList.add("hidden"); $("#dev-label-view").classList.remove("hidden"); $("#label-edit").classList.remove("hidden"); });
+$("#label-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    const r = await api(`/devices/${enc(S.current)}/label`, { method: "PUT", body: { name: $("#label-name").value, customer: $("#label-customer").value, notes: $("#label-notes").value } });
+    if (lastStatus) { lastStatus.name = r.name; lastStatus.customer = r.customer; lastStatus.notes = r.notes; renderStatus(lastStatus); }
+    $("#label-form").classList.add("hidden"); $("#dev-label-view").classList.remove("hidden"); $("#label-edit").classList.remove("hidden");
+    toast("✓ Guardado", "ok");
+  } catch (err) { toast(err.message, "err"); }
+});
 
 // tabs
 $$(".tab").forEach(t => t.addEventListener("click", () => {

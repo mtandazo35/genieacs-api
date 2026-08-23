@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from typing import Any, Optional
 
+from .. import db
 from ..bulk import resolve_targets
 from ..deps import CurrentUser, authorized_device, current_user, tenant_query
 from ..genieacs import genie
@@ -22,6 +23,12 @@ class ParamIn(BaseModel):
     path: str
     value: Any
     type: Optional[str] = None   # xsd:string / xsd:boolean / xsd:unsignedInt ...
+
+
+class LabelIn(BaseModel):
+    name: Optional[str] = None
+    customer: Optional[str] = None
+    notes: Optional[str] = None
 
 
 # raices de arbol TR-069 que exponemos completas
@@ -57,14 +64,18 @@ async def list_devices(user: CurrentUser = Depends(current_user)):
     projection = ["_id", "_tags", "_lastInform", "_deviceId",
                   "InternetGatewayDevice.DeviceInfo.SoftwareVersion"]
     rows = await genie.query_devices(tenant_query(user), projection)
+    meta = db.all_device_meta()
     out = []
     for d in rows:
         info = (d.get("InternetGatewayDevice", {}).get("DeviceInfo", {}))
         # _deviceId lo rellena GenieACS desde el Inform (siempre presente,
         # sobrevive a un BOOTSTRAP que limpia el resto del arbol)
         did = d.get("_deviceId", {})
+        m = meta.get(d["_id"], {})
         out.append({
             "id": d["_id"],
+            "name": m.get("name"),
+            "customer": m.get("customer"),
             "tags": d.get("_tags", []),
             "last_inform": d.get("_lastInform"),
             "manufacturer": did.get("_Manufacturer"),
@@ -231,11 +242,13 @@ async def device_status(device_id: str, dev=Depends(authorized_device)):
     paths = [resolve(pmap, k)[0] for k in _STATUS_KEYS if resolve(pmap, k)]
     full = await genie.get_device(device_id, paths + ["_tags", "_lastInform", "_deviceId"])
     did = full.get("_deviceId", {})
+    meta = db.get_device_meta(device_id)
     result = {"id": device_id, "tags": full.get("_tags", []),
               "last_inform": full.get("_lastInform"),
               "manufacturer": did.get("_Manufacturer"),
               "model": did.get("_ProductClass"),
-              "serial": did.get("_SerialNumber")}
+              "serial": did.get("_SerialNumber"),
+              "name": meta.get("name"), "customer": meta.get("customer"), "notes": meta.get("notes")}
     for k in _STATUS_KEYS:
         r = resolve(pmap, k)
         if r:
@@ -314,6 +327,19 @@ async def set_param(device_id: str, body: ParamIn, dev=Depends(authorized_device
     from .backup import merge_device_config
     merge_device_config(device_id, [triple])   # mantener el respaldo al dia
     return {"ok": True, **res}
+
+
+@router.get("/{device_id}/label")
+async def get_label(device_id: str, dev=Depends(authorized_device)):
+    return db.get_device_meta(device_id)
+
+
+@router.put("/{device_id}/label")
+async def set_label(device_id: str, body: LabelIn, dev=Depends(authorized_device)):
+    db.set_device_meta(device_id, (body.name or "").strip() or None,
+                       (body.customer or "").strip() or None,
+                       (body.notes or "").strip() or None)
+    return {"ok": True, **db.get_device_meta(device_id)}
 
 
 @router.get("/{device_id}/hosts")

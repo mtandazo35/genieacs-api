@@ -61,6 +61,17 @@
         <span id="dev-tags" class="tags"></span>
         <button id="read-btn" class="ghost" data-action="read">↻ Leer datos del equipo</button>
       </div>
+      <div id="dev-label" class="dev-label">
+        <span id="dev-label-view" class="muted"></span>
+        <button id="label-edit" class="ghost small">✎ Nombre / cliente</button>
+        <form id="label-form" class="hidden">
+          <input id="label-name" placeholder="Nombre del equipo (p.ej. Router sala)">
+          <input id="label-customer" placeholder="Cliente (nombre o código)">
+          <input id="label-notes" placeholder="Nota (opcional)">
+          <button type="submit">Guardar</button>
+          <button type="button" id="label-cancel" class="ghost">Cancelar</button>
+        </form>
+      </div>
       <div id="dev-status" class="status-grid"></div>
 
       <div class="tabs">

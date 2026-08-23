@@ -29,6 +29,13 @@ CREATE TABLE IF NOT EXISTS device_config (
     autorestore INTEGER NOT NULL DEFAULT 0,
     updated_at  TEXT
 );
+CREATE TABLE IF NOT EXISTS device_meta (
+    device_id TEXT PRIMARY KEY,
+    name      TEXT,
+    customer  TEXT,
+    notes     TEXT,
+    updated_at TEXT
+);
 """
 
 
@@ -121,6 +128,29 @@ def list_autorestore() -> list[dict]:
         return [dict(r) for r in c.execute(
             "SELECT device_id, config FROM device_config WHERE autorestore=1 AND config IS NOT NULL"
         ).fetchall()]
+
+
+# ---- nombre/cliente por equipo ----
+def get_device_meta(device_id: str) -> dict:
+    with connect() as c:
+        row = c.execute("SELECT name, customer, notes FROM device_meta WHERE device_id=?", (device_id,)).fetchone()
+        return dict(row) if row else {"name": None, "customer": None, "notes": None}
+
+
+def set_device_meta(device_id: str, name, customer, notes) -> None:
+    with connect() as c:
+        c.execute(
+            "INSERT INTO device_meta (device_id, name, customer, notes, updated_at) VALUES (?,?,?,?,datetime('now')) "
+            "ON CONFLICT(device_id) DO UPDATE SET name=excluded.name, customer=excluded.customer, "
+            "notes=excluded.notes, updated_at=datetime('now')",
+            (device_id, name, customer, notes),
+        )
+
+
+def all_device_meta() -> dict:
+    with connect() as c:
+        return {r["device_id"]: {"name": r["name"], "customer": r["customer"]}
+                for r in c.execute("SELECT device_id, name, customer FROM device_meta").fetchall()}
 
 
 # ---- settings (clave/valor) ----
