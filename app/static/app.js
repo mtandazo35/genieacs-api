@@ -239,6 +239,9 @@ $("#label-form").addEventListener("submit", async (e) => {
   try {
     const r = await api(`/devices/${enc(S.current)}/label`, { method: "PUT", body: { name: $("#label-name").value, customer: $("#label-customer").value, notes: $("#label-notes").value } });
     if (lastStatus) { lastStatus.name = r.name; lastStatus.customer = r.customer; lastStatus.notes = r.notes; renderStatus(lastStatus); }
+    // actualizar tambien la tarjeta en la lista (sin recargar)
+    const dc = S.devices.find(x => x.id === S.current);
+    if (dc) { dc.name = r.name; dc.customer = r.customer; }
     $("#label-form").classList.add("hidden"); $("#dev-label-view").classList.remove("hidden"); $("#label-edit").classList.remove("hidden");
     toast("✓ Guardado", "ok");
   } catch (err) { toast(err.message, "err"); }
