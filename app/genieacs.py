@@ -15,7 +15,7 @@ from typing import Any, Optional
 
 import httpx
 
-from .config import get_settings
+from . import runtime
 
 
 class GenieACSError(RuntimeError):
@@ -32,14 +32,11 @@ def encode_device_id(device_id: str) -> str:
 
 
 class GenieACS:
-    def __init__(self) -> None:
-        s = get_settings()
-        self._base = s.nbi_url.rstrip("/")
-        self._timeout = s.nbi_timeout
-        self._cr_default = s.default_connection_request
+    """La URL/timeout/CR se leen en cada llamada desde runtime (BD>env),
+    para poder cambiar de ACS sin reiniciar el servicio."""
 
     async def _client(self) -> httpx.AsyncClient:
-        return httpx.AsyncClient(base_url=self._base, timeout=self._timeout)
+        return httpx.AsyncClient(base_url=runtime.nbi_url(), timeout=runtime.nbi_timeout())
 
     # ---- consultas -------------------------------------------------------
     async def query_devices(
@@ -68,7 +65,7 @@ class GenieACS:
     async def _post_task(
         self, device_id: str, task: dict, connection_request: Optional[bool] = None
     ) -> dict:
-        cr = self._cr_default if connection_request is None else connection_request
+        cr = runtime.default_connection_request() if connection_request is None else connection_request
         path = f"/devices/{encode_device_id(device_id)}/tasks"
         params = {"connection_request": ""} if cr else {}
         async with await self._client() as c:

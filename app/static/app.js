@@ -68,8 +68,10 @@ $$("[data-nav]").forEach(a => a.addEventListener("click", (e) => {
   $("#devices-page").classList.toggle("hidden", nav !== "devices");
   $("#device-page").classList.add("hidden");
   $("#users-page").classList.toggle("hidden", nav !== "users");
+  $("#settings-page").classList.toggle("hidden", nav !== "settings");
   if (nav === "devices") loadDevices();
   if (nav === "users") loadUsers();
+  if (nav === "settings") loadSettings();
 }));
 
 // ===== Equipos: lista =====
@@ -264,6 +266,45 @@ $("#user-form").addEventListener("submit", async (e) => {
   } catch (err) { toast(err.message, "err"); }
 });
 
+// ===== Ajustes: conexión al ACS (admin) =====
+async function loadSettings() {
+  try {
+    const s = await api("/settings");
+    $("#set-url").value = s.nbi_url || "";
+    $("#set-timeout").value = s.nbi_timeout || "";
+    $("#set-cr").checked = !!s.default_connection_request;
+    $("#set-source").textContent =
+      `Origen actual: URL=${s.source.nbi_url} · timeout=${s.source.nbi_timeout} · CR=${s.source.default_connection_request}. `
+      + `Por defecto (.env): ${s.env_default_nbi_url}`;
+    $("#set-testresult").textContent = "";
+  } catch (e) { toast(e.message, "err"); }
+}
+
+actions["set-test"] = async function () {
+  const el = $("#set-testresult");
+  el.textContent = "Probando…"; el.style.color = "var(--muted)";
+  try {
+    const r = await api("/settings/test", { method: "POST", body: { nbi_url: $("#set-url").value.trim() } });
+    if (r.ok) { el.textContent = `✓ ${r.detail} (${r.latency_ms} ms)`; el.style.color = "var(--ok)"; }
+    else { el.textContent = "✗ " + (r.error || "sin conexión"); el.style.color = "var(--err)"; }
+  } catch (e) { el.textContent = "✗ " + e.message; el.style.color = "var(--err)"; }
+};
+
+$("#settings-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const body = {
+    nbi_url: $("#set-url").value.trim(),
+    default_connection_request: $("#set-cr").checked,
+  };
+  if ($("#set-timeout").value) body.nbi_timeout = +$("#set-timeout").value;
+  try {
+    const r = await api("/settings", { method: "PUT", body });
+    if (r.ok === false) return toast(r.error, "err");
+    toast("✓ Conexión al ACS actualizada (sin reiniciar)", "ok");
+    loadSettings();
+  } catch (err) { toast(err.message, "err"); }
+});
+
 // ===== Utilidades de formato =====
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function escAttr(s) { return esc(s); }
@@ -281,6 +322,7 @@ async function boot() {
     S.role = "admin";
   } catch { S.role = S.role || "isp"; }
   $("#nav-users").classList.toggle("hidden", S.role !== "admin");
+  $("#nav-settings").classList.toggle("hidden", S.role !== "admin");
   $("#who").textContent = S.isp ? `ISP: ${S.isp}` : (S.role === "admin" ? "Administrador" : "");
   loadDevices();
 }

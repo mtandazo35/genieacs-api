@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from .db import init_db
-from .routers import auth, config, devices, system
+from .routers import auth, config, devices, settings, system
 
 app = FastAPI(
     title="GenieACS API",
@@ -33,6 +33,7 @@ app.include_router(auth.router)
 app.include_router(devices.router)
 app.include_router(config.router)
 app.include_router(system.router)
+app.include_router(settings.router)
 
 # Front-end para usuario final (SPA vanilla). Se monta al final para que las
 # rutas de la API y /docs tengan precedencia; el resto sirve la app web.

@@ -27,6 +27,7 @@
     <nav>
       <a href="#" data-nav="devices" class="active">Equipos</a>
       <a href="#" data-nav="users" id="nav-users" class="hidden">Usuarios</a>
+      <a href="#" data-nav="settings" id="nav-settings" class="hidden">Ajustes</a>
     </nav>
     <div class="user-box">
       <span id="who" class="muted"></span>
@@ -164,6 +165,27 @@
         <button type="submit">Crear usuario</button>
       </form>
       <table class="tbl" id="users-table"><thead><tr><th>#</th><th>Usuario</th><th>Rol</th><th>ISP</th><th>Activo</th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <!-- Ajustes: conexión al ACS (solo admin) -->
+    <section id="settings-page" class="hidden">
+      <div class="page-head"><h2>Conexión al ACS</h2></div>
+      <form id="settings-form" class="card-form">
+        <p class="muted small">A qué servidor GenieACS se conecta esta API. Si cambia la IP de tu GenieACS, actualízala aquí — se aplica al instante, sin reiniciar.</p>
+        <label>URL del NBI (GenieACS)
+          <input id="set-url" placeholder="http://10.99.99.5:7557" required>
+        </label>
+        <div class="row">
+          <label>Timeout (s)<input id="set-timeout" type="number" min="1" max="300" placeholder="30"></label>
+          <label class="chk"><input type="checkbox" id="set-cr"> Aplicar cambios al instante (connection request)</label>
+        </div>
+        <div id="set-source" class="muted small"></div>
+        <div class="row">
+          <button type="button" data-action="set-test" class="ghost">Probar conexión</button>
+          <button type="submit">Guardar</button>
+        </div>
+        <div id="set-testresult" class="small"></div>
+      </form>
     </section>
   </main>
 </div>

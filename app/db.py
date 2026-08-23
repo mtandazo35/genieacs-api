@@ -19,6 +19,10 @@ CREATE TABLE IF NOT EXISTS users (
     active      INTEGER NOT NULL DEFAULT 1,
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT
+);
 """
 
 
@@ -62,3 +66,19 @@ def list_users() -> list[dict]:
 def set_active(username: str, active: bool) -> None:
     with connect() as c:
         c.execute("UPDATE users SET active=? WHERE username=?", (1 if active else 0, username))
+
+
+# ---- settings (clave/valor) ----
+def get_setting(key: str) -> str | None:
+    with connect() as c:
+        row = c.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+        return row["value"] if row else None
+
+
+def set_setting(key: str, value: str) -> None:
+    with connect() as c:
+        c.execute(
+            "INSERT INTO settings (key, value) VALUES (?,?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (key, value),
+        )
