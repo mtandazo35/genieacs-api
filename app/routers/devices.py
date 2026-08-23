@@ -132,6 +132,28 @@ async def _active_wan(device_id: str):
     return None
 
 
+async def active_wan_prefix(device_id: str) -> str:
+    """Path de la WANIPConnection activa (Connected). Para escribir la WAN en la
+    instancia correcta, no en la .1 fija. Cae a .1 si no hay ninguna conectada."""
+    default = _WAN_PREFIX + ".WANIPConnection.1"
+    doc = await genie.get_device(device_id, [_WAN_PREFIX])
+    base = doc or {}
+    for part in _WAN_PREFIX.split("."):
+        base = base.get(part) if isinstance(base, dict) else None
+    node = base.get("WANIPConnection") if isinstance(base, dict) else None
+    if not isinstance(node, dict):
+        return default
+    first = None
+    for k, v in node.items():
+        if k.startswith("_") or not isinstance(v, dict):
+            continue
+        if first is None:
+            first = k
+        if _val(v, "ConnectionStatus") in ("Connected", "Up"):
+            return f"{_WAN_PREFIX}.WANIPConnection.{k}"
+    return f"{_WAN_PREFIX}.WANIPConnection.{first}" if first else default
+
+
 @router.get("/{device_id}/status")
 async def device_status(device_id: str, dev=Depends(authorized_device)):
     """Estado resumido leyendo la cache del ACS (no consulta al CPE)."""

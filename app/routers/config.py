@@ -68,23 +68,32 @@ async def set_ip(device_id: str, body: IpIn, dev=Depends(authorized_device)):
 
 @router.put("/wan", response_model=ActionResult)
 async def set_wan(device_id: str, body: WanIn, dev=Depends(authorized_device)):
-    """Configura la WAN como DHCP o IP estatica (WANIPConnection.1).
+    """Configura la WAN (DHCP o IP estatica) sobre la conexion WAN ACTIVA.
 
     OJO: cambiar mal la WAN puede dejar al equipo sin internet y sin contacto
     con el ACS. En estatico se exigen ip, mascara y gateway."""
-    pmap = pick_map(dev)
+    from .devices import active_wan_prefix
+    prefix = await active_wan_prefix(device_id)
     if body.mode == "dhcp":
-        pairs = [("wan_mode", "DHCP")]
+        values = [[f"{prefix}.AddressingType", "DHCP", "xsd:string"]]
     else:
         if not (body.ip and body.mask and body.gateway):
             raise HTTPException(400, "En modo estatico se requieren ip, mask y gateway")
-        pairs = [
-            ("wan_mode", "Static"),
-            ("wan_ip", body.ip), ("wan_mask", body.mask), ("wan_gateway", body.gateway),
-            ("wan_dns", ",".join(body.dns) if body.dns else None),
-            ("wan_mtu", body.mtu),
+        values = [
+            [f"{prefix}.AddressingType", "Static", "xsd:string"],
+            [f"{prefix}.ExternalIPAddress", body.ip, "xsd:string"],
+            [f"{prefix}.SubnetMask", body.mask, "xsd:string"],
+            [f"{prefix}.DefaultGateway", body.gateway, "xsd:string"],
         ]
-    return await _apply(device_id, pmap, pairs)
+        if body.dns:
+            values.append([f"{prefix}.DNSServers", ",".join(body.dns), "xsd:string"])
+        if body.mtu:
+            values.append([f"{prefix}.MaxMTUSize", body.mtu, "xsd:unsignedInt"])
+    res = await genie.set_parameter_values(device_id, values)
+    merge_device_config(device_id, values)
+    inst = ".".join(prefix.split(".")[-2:])   # p.ej. WANIPConnection.2
+    return ActionResult(applied=res["applied"], queued=res["queued"],
+                        detail=f"WAN aplicada en {inst}")
 
 
 @router.put("/pppoe", response_model=ActionResult)
