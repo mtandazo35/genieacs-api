@@ -101,6 +101,20 @@ async def set_wan(device_id: str, body: WanIn, dev=Depends(authorized_device)):
                                      f"{body.ip}/{body.mask} ({net}). Corrige los datos o perderas el enlace.")
         if ip_addr == gw_addr:
             raise HTTPException(400, "La IP y el gateway no pueden ser iguales")
+        # evitar cambiar a una red distinta de la actual (perderia el enlace con el ACS)
+        try:
+            from .devices import _active_wan
+            cur = await _active_wan(device_id)
+            cur_ip = cur.get("ip") if cur else None
+            if cur_ip and ipaddress.IPv4Address(cur_ip) not in net:
+                raise HTTPException(400,
+                    f"La nueva IP {body.ip}/{body.mask} esta en otra red distinta a la actual del "
+                    f"equipo ({cur_ip}). Perderias el enlace con el ACS. Usa una IP de la red actual "
+                    f"o hazlo localmente en el equipo.")
+        except HTTPException:
+            raise
+        except Exception:
+            pass
         values = [
             [f"{prefix}.AddressingType", "Static", "xsd:string"],
             [f"{prefix}.ExternalIPAddress", body.ip, "xsd:string"],
