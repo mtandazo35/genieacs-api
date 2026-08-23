@@ -36,6 +36,16 @@ CREATE TABLE IF NOT EXISTS device_meta (
     notes     TEXT,
     updated_at TEXT
 );
+CREATE TABLE IF NOT EXISTS audit_log (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts        TEXT NOT NULL DEFAULT (datetime('now')),
+    user      TEXT,
+    device_id TEXT,
+    action    TEXT,
+    method    TEXT,
+    path      TEXT,
+    status    INTEGER
+);
 """
 
 
@@ -151,6 +161,25 @@ def all_device_meta() -> dict:
     with connect() as c:
         return {r["device_id"]: {"name": r["name"], "customer": r["customer"]}
                 for r in c.execute("SELECT device_id, name, customer FROM device_meta").fetchall()}
+
+
+# ---- auditoria (registro de cambios) ----
+def add_audit(user, device_id, action, method, path, status) -> None:
+    with connect() as c:
+        c.execute(
+            "INSERT INTO audit_log (user, device_id, action, method, path, status) VALUES (?,?,?,?,?,?)",
+            (user, device_id, action, method, path, status),
+        )
+
+
+def list_audit(device_id=None, limit=300) -> list[dict]:
+    with connect() as c:
+        if device_id:
+            rows = c.execute("SELECT * FROM audit_log WHERE device_id=? ORDER BY id DESC LIMIT ?",
+                             (device_id, limit)).fetchall()
+        else:
+            rows = c.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+        return [dict(r) for r in rows]
 
 
 # ---- settings (clave/valor) ----

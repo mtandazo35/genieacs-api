@@ -3,15 +3,17 @@
 Expone endpoints limpios (WiFi, IP, PPPoE, DNS, hora, firmware, reinicios
 programados) para que paneles/facturacion no tengan que hablar TR-069 crudo.
 """
+import asyncio
 import os
+from urllib.parse import unquote
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 
-import asyncio
-
+from . import db
 from .db import init_db
 from .routers import auth, backup, config, devices, firmware, settings, system
+from .security import decode_token
 
 
 class NoCacheStatic(StaticFiles):
@@ -36,6 +38,36 @@ async def _startup():
     init_db()
     # bucle de auto-restauracion de config tras factory reset
     asyncio.create_task(backup.enforce_loop())
+
+
+_AUDIT_PREFIXES = ("/devices", "/firmware", "/settings", "/auth/users")
+
+
+@app.middleware("http")
+async def audit_middleware(request: Request, call_next):
+    """Registra toda operacion de escritura (POST/PUT/DELETE) en el log de auditoria."""
+    response = await call_next(request)
+    try:
+        path = request.url.path
+        if request.method in ("POST", "PUT", "DELETE") and any(path.startswith(p) for p in _AUDIT_PREFIXES):
+            user = "?"
+            auth_h = request.headers.get("authorization", "")
+            if auth_h.startswith("Bearer "):
+                data = decode_token(auth_h[7:])
+                if data:
+                    user = data.get("sub", "?")
+            parts = path.strip("/").split("/")
+            device_id, action = None, parts[0]
+            if parts[0] == "devices" and len(parts) >= 3:
+                device_id = unquote(parts[1]); action = "/".join(parts[2:])
+            elif parts[0] == "devices" and len(parts) == 2:
+                device_id = unquote(parts[1]); action = "device"
+            elif len(parts) >= 2:
+                action = "/".join(parts[:2])
+            db.add_audit(user, device_id, action, request.method, path, response.status_code)
+    except Exception:
+        pass
+    return response
 
 
 @app.get("/health", tags=["meta"])

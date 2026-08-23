@@ -30,6 +30,7 @@
       <a href="#" data-nav="updates" id="nav-updates" class="hidden">Actualizaciones</a>
       <a href="#" data-nav="users" id="nav-users" class="hidden">Usuarios</a>
       <a href="#" data-nav="settings" id="nav-settings" class="hidden">Ajustes</a>
+      <a href="#" data-nav="audit" id="nav-audit" class="hidden">Actividad</a>
       <a href="#" data-nav="account">Mi cuenta</a>
     </nav>
     <div class="user-box">
@@ -83,6 +84,7 @@
         <button class="tab" data-tab="time">Hora</button>
         <button class="tab" data-tab="fw">Firmware</button>
         <button class="tab" data-tab="clients">Clientes</button>
+        <button class="tab" data-tab="diag">Diagnóstico</button>
         <button class="tab" data-tab="power">Reinicio</button>
         <button class="tab" data-tab="backup">Respaldo</button>
         <button class="tab" data-tab="adv">Avanzado</button>
@@ -188,6 +190,16 @@
         </div>
       </div>
 
+      <div class="panel wide hidden" data-panel="diag">
+        <p class="muted small">El propio equipo ejecuta el ping/traceroute hacia el destino (puede tardar unos segundos).</p>
+        <label>Destino (IP o dominio)<input id="diag-host" placeholder="8.8.8.8 o google.com"></label>
+        <div class="row">
+          <button type="button" id="diag-ping">Ping</button>
+          <button type="button" id="diag-trace" class="ghost">Traceroute</button>
+        </div>
+        <div id="diag-result" class="diag-result"></div>
+      </div>
+
       <div class="panel wide hidden" data-panel="clients">
         <button type="button" id="clients-refresh" class="ghost small" style="margin-bottom:.8rem">↻ Actualizar</button>
         <div id="clients-count" class="muted small"></div>
@@ -241,6 +253,13 @@
         <button type="submit">Crear usuario</button>
       </form>
       <table class="tbl" id="users-table"><thead><tr><th>#</th><th>Usuario</th><th>Rol</th><th>ISP</th><th>Activo</th><th>Acciones</th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <!-- Actividad / auditoría (solo admin) -->
+    <section id="audit-page" class="hidden">
+      <div class="page-head"><h2>Actividad</h2><button id="audit-refresh" class="ghost">↻ Actualizar</button></div>
+      <input id="audit-filter" class="filter" placeholder="Filtrar por usuario, acción o equipo…">
+      <table class="tbl" id="audit-table"><thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Equipo</th><th>Estado</th></tr></thead><tbody></tbody></table>
     </section>
 
     <!-- Mi cuenta (todos) -->

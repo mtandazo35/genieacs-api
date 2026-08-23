@@ -1,4 +1,6 @@
 """Listado y estado de dispositivos (filtrado por ISP)."""
+import asyncio
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from typing import Any, Optional
@@ -29,6 +31,37 @@ class LabelIn(BaseModel):
     name: Optional[str] = None
     customer: Optional[str] = None
     notes: Optional[str] = None
+
+
+class PingIn(BaseModel):
+    host: str
+    count: int = 4
+
+
+class TraceIn(BaseModel):
+    host: str
+    max_hops: int = 20
+    tries: int = 3
+
+
+async def _run_diag(device_id: str, prefix: str, inputs: dict, wait_s: int = 60) -> str:
+    """Lanza un diagnostico TR-069 (Requested) y espera a que el CPE lo complete."""
+    values = [[f"{prefix}.{k}", v, t] for k, (v, t) in inputs.items()]
+    values.append([f"{prefix}.DiagnosticsState", "Requested", "xsd:string"])
+    await genie.set_parameter_values(device_id, values)
+    state = None
+    for _ in range(max(1, wait_s // 3)):
+        await asyncio.sleep(3)
+        doc = await genie.get_device(device_id, [prefix])
+        state = _read(doc or {}, f"{prefix}.DiagnosticsState")
+        if state and state not in ("Requested", "None"):
+            try:
+                await genie.refresh_object(device_id, prefix, connection_request=False)
+                await asyncio.sleep(2)
+            except Exception:
+                pass
+            break
+    return state or "Timeout"
 
 
 # raices de arbol TR-069 que exponemos completas
@@ -342,11 +375,60 @@ async def set_label(device_id: str, body: LabelIn, dev=Depends(authorized_device
     return {"ok": True, **db.get_device_meta(device_id)}
 
 
+@router.get("/{device_id}/audit")
+async def device_audit(device_id: str, dev=Depends(authorized_device)):
+    """Historial de cambios de este equipo."""
+    return db.list_audit(device_id=device_id, limit=200)
+
+
 @router.get("/{device_id}/hosts")
 async def get_hosts(device_id: str, dev=Depends(authorized_device)):
     """Clientes conectados (LAN hosts) del equipo."""
     hosts = await lan_hosts(device_id)
     return {"count": len(hosts), "hosts": hosts}
+
+
+@router.post("/{device_id}/diag/ping")
+async def diag_ping(device_id: str, body: PingIn, dev=Depends(authorized_device)):
+    """Ping desde el propio equipo (IPPingDiagnostics)."""
+    prefix = "InternetGatewayDevice.IPPingDiagnostics"
+    state = await _run_diag(device_id, prefix, {
+        "Host": (body.host, "xsd:string"),
+        "NumberOfRepetitions": (max(1, min(body.count, 20)), "xsd:unsignedInt"),
+    })
+    doc = await genie.get_device(device_id, [prefix])
+    g = lambda k: _read(doc or {}, f"{prefix}.{k}")
+    return {"state": state, "host": body.host,
+            "success": g("SuccessCount"), "failure": g("FailureCount"),
+            "avg_ms": g("AverageResponseTime"), "min_ms": g("MinimumResponseTime"),
+            "max_ms": g("MaximumResponseTime")}
+
+
+@router.post("/{device_id}/diag/traceroute")
+async def diag_traceroute(device_id: str, body: TraceIn, dev=Depends(authorized_device)):
+    """Traceroute desde el propio equipo (TraceRouteDiagnostics)."""
+    prefix = "InternetGatewayDevice.TraceRouteDiagnostics"
+    state = await _run_diag(device_id, prefix, {
+        "Host": (body.host, "xsd:string"),
+        "MaxHopCount": (max(1, min(body.max_hops, 30)), "xsd:unsignedInt"),
+        "NumberOfTries": (max(1, min(body.tries, 5)), "xsd:unsignedInt"),
+    }, wait_s=75)
+    doc = await genie.get_device(device_id, [prefix])
+    base = doc or {}
+    for part in prefix.split("."):
+        base = base.get(part) if isinstance(base, dict) else None
+    hops = []
+    node = base.get("RouteHops") if isinstance(base, dict) else None
+    if isinstance(node, dict):
+        for k, v in sorted(node.items(), key=lambda kv: (kv[0].isdigit() and int(kv[0]) or 0)):
+            if k.startswith("_") or not isinstance(v, dict):
+                continue
+            host = _val(v, "HopHost") or _val(v, "Host")
+            addr = _val(v, "HopHostAddress") or _val(v, "HostAddress")
+            rtt = _val(v, "HopRTTimes") or _val(v, "RTTimes")
+            hops.append({"host": host or addr or "*", "address": addr, "rtt": rtt})
+    return {"state": state, "host": body.host,
+            "response_ms": _read(doc or {}, f"{prefix}.ResponseTime"), "hops": hops}
 
 
 @router.post("/read-bulk")

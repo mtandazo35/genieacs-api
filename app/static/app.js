@@ -68,12 +68,14 @@ function navigate(nav) {
   $("#settings-page").classList.toggle("hidden", nav !== "settings");
   $("#updates-page").classList.toggle("hidden", nav !== "updates");
   $("#account-page").classList.toggle("hidden", nav !== "account");
+  $("#audit-page").classList.toggle("hidden", nav !== "audit");
   try { localStorage.setItem("view", nav); localStorage.removeItem("device"); } catch {}
   if (nav === "devices") loadDevices();
   if (nav === "users") loadUsers();
   if (nav === "settings") loadSettings();
   if (nav === "updates") loadUpdates();
   if (nav === "account") loadAccount();
+  if (nav === "audit") loadAudit();
 }
 $$("[data-nav]").forEach(a => a.addEventListener("click", (e) => { e.preventDefault(); navigate(a.dataset.nav); }));
 
@@ -268,6 +270,36 @@ async function loadClients() {
       : `<tr><td colspan="5" class="muted">Sin clientes reportados. Pulsa Actualizar (o el equipo aún no los reportó).</td></tr>`;
   } catch (e) { toast(e.message, "err"); }
 }
+// diagnóstico: ping / traceroute desde el equipo
+$("#diag-ping").addEventListener("click", async () => {
+  const host = $("#diag-host").value.trim();
+  if (!host) return toast("Indica un destino", "err");
+  const out = $("#diag-result"); out.textContent = "Haciendo ping desde el equipo…";
+  const b = $("#diag-ping"); b.disabled = true;
+  try {
+    const r = await api(`/devices/${enc(S.current)}/diag/ping`, { method: "POST", body: { host, count: 4 } });
+    const ok = r.state === "Complete";
+    out.innerHTML = `<div class="diag-box"><b>Ping a ${esc(host)}</b> — ${ok ? "✅" : "⚠ " + esc(r.state)}
+      <br>Éxitos: ${r.success ?? "-"} · Fallos: ${r.failure ?? "-"}
+      <br>Tiempo: min ${r.min_ms ?? "-"} ms · prom ${r.avg_ms ?? "-"} ms · máx ${r.max_ms ?? "-"} ms</div>`;
+  } catch (e) { out.textContent = "✗ " + e.message; }
+  finally { b.disabled = false; }
+});
+$("#diag-trace").addEventListener("click", async () => {
+  const host = $("#diag-host").value.trim();
+  if (!host) return toast("Indica un destino", "err");
+  const out = $("#diag-result"); out.textContent = "Trazando ruta desde el equipo… (puede tardar)";
+  const b = $("#diag-trace"); b.disabled = true;
+  try {
+    const r = await api(`/devices/${enc(S.current)}/diag/traceroute`, { method: "POST", body: { host } });
+    const ok = r.state === "Complete";
+    const rows = (r.hops || []).map((h, i) => `<tr><td>${i + 1}</td><td>${esc(h.address || h.host || "*")}</td><td>${esc(h.rtt || "")}</td></tr>`).join("");
+    out.innerHTML = `<div class="diag-box"><b>Traceroute a ${esc(host)}</b> — ${ok ? "✅" : "⚠ " + esc(r.state)}
+      ${rows ? `<table class="tbl"><thead><tr><th>#</th><th>Salto</th><th>RTT</th></tr></thead><tbody>${rows}</tbody></table>` : "<br>Sin saltos reportados."}</div>`;
+  } catch (e) { out.textContent = "✗ " + e.message; }
+  finally { b.disabled = false; }
+});
+
 $("#clients-refresh").addEventListener("click", async () => {
   const b = $("#clients-refresh"); b.disabled = true; const p = b.textContent; b.textContent = "Actualizando…";
   try {
@@ -635,6 +667,28 @@ document.addEventListener("click", async (e) => {
   } catch (err) { toast(err.message, "err"); }
 });
 
+// ===== Actividad / auditoría (admin) =====
+let auditCache = [];
+function fmtAuditDate(ts) { if (!ts) return "-"; const d = new Date(ts.replace(" ", "T") + "Z"); return isNaN(d) ? ts : d.toLocaleString(); }
+async function loadAudit() {
+  try {
+    auditCache = await api("/auth/audit");
+    renderAudit();
+  } catch (e) { toast(e.message, "err"); }
+}
+function renderAudit() {
+  const q = ($("#audit-filter").value || "").toLowerCase();
+  const nameOf = id => { const d = (S.devices || []).find(x => x.id === id); return d && d.name ? d.name : (id || "-"); };
+  const items = auditCache.filter(a => !q || (`${a.user} ${a.action} ${a.device_id || ""} ${a.method}`).toLowerCase().includes(q));
+  $("#audit-table tbody").innerHTML = items.map(a =>
+    `<tr><td>${esc(fmtAuditDate(a.ts))}</td><td>${esc(a.user || "?")}</td>
+     <td>${esc(a.method)} ${esc(a.action)}</td><td>${esc(nameOf(a.device_id))}</td>
+     <td>${a.status >= 200 && a.status < 300 ? "✅ " : "⚠ "}${a.status || ""}</td></tr>`).join("")
+    || `<tr><td colspan="5" class="muted">Sin actividad registrada.</td></tr>`;
+}
+$("#audit-filter").addEventListener("input", renderAudit);
+$("#audit-refresh").addEventListener("click", loadAudit);
+
 async function loadAccount() {
   try {
     const me = await api("/auth/me");
@@ -814,6 +868,7 @@ async function boot() {
   $("#nav-users").classList.toggle("hidden", S.role !== "admin");
   $("#nav-settings").classList.toggle("hidden", S.role !== "admin");
   $("#nav-updates").classList.toggle("hidden", S.role !== "admin");
+  $("#nav-audit").classList.toggle("hidden", S.role !== "admin");
   $("#who").textContent = S.isp ? `ISP: ${S.isp}` : (S.role === "admin" ? "Administrador" : "");
   // restaurar la ultima vista (y equipo) en vez de volver siempre a Equipos
   let view = "devices", dev = null;

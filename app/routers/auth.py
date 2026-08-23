@@ -56,6 +56,12 @@ async def users():
     return db.list_users()
 
 
+@router.get("/audit", dependencies=[Depends(require_admin)])
+async def audit(limit: int = 300):
+    """Registro de auditoria: cada cambio hecho por la API (solo admin)."""
+    return db.list_audit(limit=min(limit, 1000))
+
+
 @router.post("/users", status_code=201, dependencies=[Depends(require_admin)])
 async def create_user(body: UserIn):
     if db.get_user(body.username):
