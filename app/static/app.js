@@ -234,17 +234,22 @@ async function loadWan() {
   } catch (e) { /* silencioso */ }
 }
 
-// refrescar la WAN desde el equipo (evita datos cacheados viejos)
-$("#wan-refresh").addEventListener("click", async () => {
-  const b = $("#wan-refresh"); b.disabled = true; const p = b.textContent; b.textContent = "Actualizando…";
+// refrescar la WAN real del equipo (evita datos cacheados viejos)
+async function wanRefreshFromDevice(silent) {
   try {
     await api(`/devices/${enc(S.current)}/refresh?object=${encodeURIComponent("InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1")}`, { method: "POST" });
-    for (let i = 0; i < 5; i++) { await new Promise(r => setTimeout(r, 2500)); await loadWan(); }
-    // refrescar tambien la ficha de estado
-    const st = await api(`/devices/${enc(S.current)}/status`); renderStatus(st);
-    toast("✓ WAN actualizada", "ok");
-  } catch (e) { toast(e.message, "err"); }
-  finally { b.disabled = false; b.textContent = p; }
+    for (let i = 0; i < 5; i++) {
+      await new Promise(r => setTimeout(r, 2500));
+      await loadWan();
+      const st = await api(`/devices/${enc(S.current)}/status`); renderStatus(st);
+    }
+    if (!silent) toast("✓ WAN actualizada", "ok");
+  } catch (e) { if (!silent) toast(e.message, "err"); }
+}
+$("#wan-refresh").addEventListener("click", async () => {
+  const b = $("#wan-refresh"); b.disabled = true; const p = b.textContent; b.textContent = "Actualizando…";
+  await wanRefreshFromDevice(false);
+  b.disabled = false; b.textContent = p;
 });
 
 // ---- Respaldo / auto-restauración ----
@@ -430,8 +435,9 @@ const actions = {
       : "¿Aplicar WAN por DHCP?";
     if (!confirm(aviso)) return;
     const r = await api(`/devices/${enc(S.current)}/wan`, { method: "PUT", body });
-    report(r); refreshAfterChange(r);
+    report(r);
     clearInputs("wan-ip", "wan-mask", "wan-gw", "wan-dns", "wan-mtu");
+    wanRefreshFromDevice(true);   // refrescar la WAN real para reflejar el cambio
   },
   async pppoe() {
     const body = { enable: $("#ppp-enable").checked };
