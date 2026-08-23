@@ -68,6 +68,21 @@ def set_active(username: str, active: bool) -> None:
         c.execute("UPDATE users SET active=? WHERE username=?", (1 if active else 0, username))
 
 
+def update_password(username: str, password_hash: str) -> None:
+    with connect() as c:
+        c.execute("UPDATE users SET password=? WHERE username=?", (password_hash, username))
+
+
+def delete_user(username: str) -> None:
+    with connect() as c:
+        c.execute("DELETE FROM users WHERE username=?", (username,))
+
+
+def count_active_admins() -> int:
+    with connect() as c:
+        return c.execute("SELECT COUNT(*) AS n FROM users WHERE role='admin' AND active=1").fetchone()["n"]
+
+
 # ---- settings (clave/valor) ----
 def get_setting(key: str) -> str | None:
     with connect() as c:

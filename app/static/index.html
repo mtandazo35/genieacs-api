@@ -29,6 +29,7 @@
       <a href="#" data-nav="updates" id="nav-updates" class="hidden">Actualizaciones</a>
       <a href="#" data-nav="users" id="nav-users" class="hidden">Usuarios</a>
       <a href="#" data-nav="settings" id="nav-settings" class="hidden">Ajustes</a>
+      <a href="#" data-nav="account">Mi cuenta</a>
     </nav>
     <div class="user-box">
       <span id="who" class="muted"></span>
@@ -185,7 +186,20 @@
         </div>
         <button type="submit">Crear usuario</button>
       </form>
-      <table class="tbl" id="users-table"><thead><tr><th>#</th><th>Usuario</th><th>Rol</th><th>ISP</th><th>Activo</th></tr></thead><tbody></tbody></table>
+      <table class="tbl" id="users-table"><thead><tr><th>#</th><th>Usuario</th><th>Rol</th><th>ISP</th><th>Activo</th><th>Acciones</th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <!-- Mi cuenta (todos) -->
+    <section id="account-page" class="hidden">
+      <div class="page-head"><h2>Mi cuenta</h2></div>
+      <form id="account-form" class="card-form">
+        <h3>Cambiar mi contraseña</h3>
+        <div id="account-who" class="muted small"></div>
+        <label>Contraseña actual<input id="acc-current" type="password" required></label>
+        <label>Contraseña nueva<input id="acc-new" type="password" minlength="6" required></label>
+        <label>Repetir contraseña nueva<input id="acc-new2" type="password" minlength="6" required></label>
+        <button type="submit">Cambiar contraseña</button>
+      </form>
     </section>
 
     <!-- Actualizaciones / firmware (solo admin) -->

@@ -70,10 +70,12 @@ $$("[data-nav]").forEach(a => a.addEventListener("click", (e) => {
   $("#users-page").classList.toggle("hidden", nav !== "users");
   $("#settings-page").classList.toggle("hidden", nav !== "settings");
   $("#updates-page").classList.toggle("hidden", nav !== "updates");
+  $("#account-page").classList.toggle("hidden", nav !== "account");
   if (nav === "devices") loadDevices();
   if (nav === "users") loadUsers();
   if (nav === "settings") loadSettings();
   if (nav === "updates") loadUpdates();
+  if (nav === "account") loadAccount();
 }));
 
 // ===== Equipos: lista =====
@@ -367,9 +369,56 @@ async function loadUsers() {
   try {
     const users = await api("/auth/users");
     $("#users-table tbody").innerHTML = users.map(u =>
-      `<tr><td>${u.id}</td><td>${esc(u.username)}</td><td>${esc(u.role)}</td><td>${esc(u.isp_tag || "-")}</td><td>${u.active ? "sí" : "no"}</td></tr>`).join("");
+      `<tr><td>${u.id}</td><td>${esc(u.username)}</td><td>${esc(u.role)}</td><td>${esc(u.isp_tag || "-")}</td>
+        <td>${u.active ? "sí" : "no"}</td>
+        <td class="uactions">
+          <button class="ghost small" data-uact="pass" data-u="${escAttr(u.username)}">Clave</button>
+          <button class="ghost small" data-uact="toggle" data-u="${escAttr(u.username)}" data-active="${u.active}">${u.active ? "Desactivar" : "Activar"}</button>
+          <button class="ghost small" data-uact="del" data-u="${escAttr(u.username)}">Eliminar</button>
+        </td></tr>`).join("");
   } catch (e) { toast(e.message, "err"); }
 }
+
+// acciones sobre usuarios (admin)
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-uact]");
+  if (!b) return;
+  const u = b.dataset.u, act = b.dataset.uact;
+  try {
+    if (act === "pass") {
+      const p = prompt("Nueva contraseña para " + u + " (mín. 6):");
+      if (!p) return;
+      if (p.length < 6) return toast("Mínimo 6 caracteres", "err");
+      await api(`/auth/users/${encodeURIComponent(u)}/password`, { method: "PUT", body: { new_password: p } });
+      toast("✓ Contraseña actualizada", "ok");
+    } else if (act === "toggle") {
+      const active = b.dataset.active !== "1" && b.dataset.active !== "true";
+      await api(`/auth/users/${encodeURIComponent(u)}/active`, { method: "POST", body: { active } });
+      toast("✓ Estado actualizado", "ok"); loadUsers();
+    } else if (act === "del") {
+      if (!confirm("¿Eliminar al usuario " + u + "?")) return;
+      await api(`/auth/users/${encodeURIComponent(u)}`, { method: "DELETE" });
+      toast("✓ Usuario eliminado", "ok"); loadUsers();
+    }
+  } catch (err) { toast(err.message, "err"); }
+});
+
+async function loadAccount() {
+  try {
+    const me = await api("/auth/me");
+    $("#account-who").textContent = `Usuario: ${me.username} · rol: ${me.role}` + (me.isp ? ` · ISP: ${me.isp}` : "");
+  } catch (e) { /* ignore */ }
+}
+
+$("#account-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const cur = $("#acc-current").value, n1 = $("#acc-new").value, n2 = $("#acc-new2").value;
+  if (n1 !== n2) return toast("Las contraseñas nuevas no coinciden", "err");
+  try {
+    await api("/auth/me/password", { method: "PUT", body: { current_password: cur, new_password: n1 } });
+    toast("✓ Contraseña cambiada", "ok"); $("#account-form").reset();
+  } catch (err) { toast(err.message, "err"); }
+});
 
 $("#user-form").addEventListener("submit", async (e) => {
   e.preventDefault();
