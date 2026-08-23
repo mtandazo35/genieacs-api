@@ -4,6 +4,10 @@ const S = { token: localStorage.getItem("token") || null, role: null, isp: null,
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 
+// tags internos que no se muestran al usuario final
+const HIDDEN_TAGS = new Set(["sched-reboot"]);
+const visibleTags = (tags) => (tags || []).filter(t => !HIDDEN_TAGS.has(t));
+
 function toast(msg, kind = "info") {
   const t = $("#toast");
   t.textContent = msg;
@@ -87,7 +91,7 @@ function renderDevices() {
     return `<div class="dev-card" data-id="${escAttr(d.id)}">
       <h3><span class="dot ${online ? "on" : "off"}"></span>${esc(d.manufacturer || "?")} </h3>
       <div class="model">${esc(d.model || "modelo ?")}</div>
-      <div class="meta">FW: ${esc(d.firmware || "-")}<br>Último reporte: ${fmtDate(d.last_inform)}<br>${(d.tags || []).map(t => `#${esc(t)}`).join(" ")}</div>
+      <div class="meta">FW: ${esc(d.firmware || "-")}<br>Último reporte: ${fmtDate(d.last_inform)}<br>${visibleTags(d.tags).map(t => `#${esc(t)}`).join(" ")}</div>
     </div>`;
   }).join("");
   $$(".dev-card", list).forEach(c => c.addEventListener("click", () => openDevice(c.dataset.id)));
@@ -114,7 +118,7 @@ async function openDevice(id) {
 }
 
 function renderStatus(st) {
-  $("#dev-tags").innerHTML = (st.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join("");
+  $("#dev-tags").innerHTML = visibleTags(st.tags).map(t => `<span class="tag">${esc(t)}</span>`).join("");
   const cells = [
     ["Firmware", st.firmware], ["Uptime", fmtUptime(st.uptime)], ["CPU", st.cpu != null ? st.cpu + "%" : "-"],
     ["IP WAN", st.wan_ip], ["IP LAN", st.lan_ip], ["SSID 2.4G", st.wifi_2g_ssid],

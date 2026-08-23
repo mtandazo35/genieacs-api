@@ -14,20 +14,22 @@ _STATUS_KEYS = ["firmware", "uptime", "cpu", "wan_ip", "wifi_2g_ssid", "wifi_5g_
 @router.get("")
 async def list_devices(user: CurrentUser = Depends(current_user)):
     """Lista los CPE visibles para el usuario (admin=todos, ISP=por su tag)."""
-    projection = ["_id", "_tags", "_lastInform",
-                  "InternetGatewayDevice.DeviceInfo.Manufacturer",
-                  "InternetGatewayDevice.DeviceInfo.ProductClass",
+    projection = ["_id", "_tags", "_lastInform", "_deviceId",
                   "InternetGatewayDevice.DeviceInfo.SoftwareVersion"]
     rows = await genie.query_devices(tenant_query(user), projection)
     out = []
     for d in rows:
         info = (d.get("InternetGatewayDevice", {}).get("DeviceInfo", {}))
+        # _deviceId lo rellena GenieACS desde el Inform (siempre presente,
+        # sobrevive a un BOOTSTRAP que limpia el resto del arbol)
+        did = d.get("_deviceId", {})
         out.append({
             "id": d["_id"],
             "tags": d.get("_tags", []),
             "last_inform": d.get("_lastInform"),
-            "manufacturer": (info.get("Manufacturer") or {}).get("_value"),
-            "model": (info.get("ProductClass") or {}).get("_value"),
+            "manufacturer": did.get("_Manufacturer"),
+            "model": did.get("_ProductClass"),
+            "serial": did.get("_SerialNumber"),
             "firmware": (info.get("SoftwareVersion") or {}).get("_value"),
         })
     return out
