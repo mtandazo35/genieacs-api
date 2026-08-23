@@ -4,6 +4,8 @@ Panel web + **API de negocio multi-tenant** sobre [GenieACS](https://genieacs.co
 
 GenieACS queda como **motor** por debajo; esta API pone la capa de negocio, la autenticación, la separación por ISP y el panel. FastAPI, con **Swagger interactivo en `/docs`** (referencia siempre actualizada) y **panel web en `/`**.
 
+📄 [CHANGELOG](CHANGELOG.md) · 🚀 [Notas de despliegue (DEPLOY.md)](DEPLOY.md)
+
 ## ⚡ Quick install (one-liner)
 
 En la VM (Debian 12/13 o Ubuntu 22.04/24.04, como root):
