@@ -2,6 +2,18 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
+## [1.3.0] - 2026-08-23
+
+### Añadido
+- **Restauración de WAN PPPoE en TR-181**: se mapeó `pppoe_enable` (`Device.PPP.Interface.1.Enable`) y se añadió preservación de claves *write-only* (`WRITEONLY_KEYS`/`writeonly_paths()`): las contraseñas PPPoE y WiFi del TP-Link, que no se pueden leer del equipo, se capturan al aplicarlas por el panel y `_snapshot` las conserva del respaldo previo en vez de borrarlas. Antes un `/backup` manual las perdía.
+
+### Cambiado
+- **Pestaña WiFi con 2.4 GHz y 5 GHz separadas**: dos bloques independientes (SSID, contraseña, canal, radio, oculta) precargados del estado; se elimina el desplegable "Banda". Cada bloque aplica su banda por separado.
+- **Zona horaria consciente del modelo**: el formato de `LocalTimeZone` difiere por modelo (Cudy TR-098 usa la lista enumerada, p.ej. `GMT-05:00`; TP-Link TR-181 usa offset `-05:00`). Flota fijada a Ecuador (UTC-5, sin DST).
+
+### Notas / limitaciones
+- En TP-Link, cambiar la WAN a PPPoE puede requerir además `X_TP_ServiceType` en la interfaz WAN; la restauración tras factory reset depende de que exista `Device.PPP.Interface.1`. DHCP/estático por TR-181 no se respalda (DHCP es el default; estático TR-181 no soportado en `set_wan`).
+
 ## [1.2.0] - 2026-08-23
 
 ### Añadido
