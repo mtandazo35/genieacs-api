@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from .. import db
 from ..deps import authorized_device
 from ..genieacs import genie
-from ..parammap import CONFIG_KEYS, pick_map, resolve
+from ..parammap import CONFIG_KEYS, pick_map, resolve, writeonly_paths
 
 router = APIRouter(prefix="/devices/{device_id}", tags=["backup"])
 
@@ -71,6 +71,21 @@ async def _snapshot(device_id: str, pmap: dict) -> dict:
     paths = _config_paths(pmap)
     doc = await genie.get_device(device_id, [p for p, _ in paths])
     cfg = {}
+    # Preservar valores write-only ya capturados (claves WiFi/PPPoE del TP-Link):
+    # no se pueden releer del equipo, asi que se arrastran del respaldo previo
+    # para que un /backup manual no los borre.
+    wo = writeonly_paths(pmap)
+    if wo:
+        prev = db.get_device_config(device_id)
+        if prev and prev.get("config"):
+            try:
+                prev_cfg = json.loads(prev["config"])
+            except Exception:
+                prev_cfg = {}
+            for p in wo:
+                v = prev_cfg.get(p)
+                if v and v[0] not in (None, ""):
+                    cfg[p] = v
     for path, xsd in paths:
         val = _read_path(doc or {}, path)
         if val is not None and val != "":

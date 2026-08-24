@@ -94,6 +94,7 @@ TR181 = {
         "dhcp_min": "Device.DHCPv4.Server.Pool.1.MinAddress",
         "dhcp_max": "Device.DHCPv4.Server.Pool.1.MaxAddress",
         "dhcp_enable": ("Device.DHCPv4.Server.Pool.1.Enable", "xsd:boolean"),
+        "pppoe_enable": ("Device.PPP.Interface.1.Enable", "xsd:boolean"),
         "pppoe_user": "Device.PPP.Interface.1.Username",
         "pppoe_password": "Device.PPP.Interface.1.Password",
         "pppoe_status": "Device.PPP.Interface.1.ConnectionStatus",
@@ -115,6 +116,26 @@ TR181 = {
         "admin_enable": ("Device.Users.User.1.Enable", "xsd:boolean"),
     },
 }
+
+
+# Claves cuyo valor NO se puede releer del equipo (write-only): al respaldar se
+# preservan del respaldo previo en vez de perderse. Depende del modelo:
+# el TP-Link (TR-181) no devuelve claves WiFi ni PPPoE; el Cudy (TR-098) sí.
+WRITEONLY_KEYS = {
+    "Device": ["wifi_2g_password", "wifi_5g_password", "pppoe_password"],
+    "InternetGatewayDevice": [],
+}
+
+
+def writeonly_paths(pmap: dict) -> set:
+    """Paths (no claves) write-only del modelo, para preservarlos en el snapshot."""
+    keys = WRITEONLY_KEYS.get(pmap.get("root"), [])
+    out = set()
+    for k in keys:
+        r = resolve(pmap, k)
+        if r:
+            out.add(r[0])
+    return out
 
 
 def pick_map(device: dict) -> dict:
