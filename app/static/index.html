@@ -93,19 +93,30 @@
       </div>
 
       <div class="panel" data-panel="wifi">
-        <div class="row">
-          <label>Banda
-            <select id="wifi-band"><option value="2g">2.4 GHz</option><option value="5g">5 GHz</option></select>
-          </label>
+        <div class="two-col">
+          <div class="wifi-block card-form" data-band="2g">
+          <h3 style="margin-top:0">WiFi 2.4 GHz</h3>
+          <label>Nombre de red (SSID)<input class="w-ssid" placeholder="vacío = no cambiar"></label>
+          <label>Contraseña WiFi<input class="w-pass" placeholder="mín. 8 (vacío = no cambiar)"></label>
+          <div class="row">
+            <label>Canal<input class="w-chan" type="number" min="0" max="196" placeholder="opcional"></label>
+            <label class="chk"><input type="checkbox" class="w-enable" checked> Encendido</label>
+            <label class="chk"><input type="checkbox" class="w-hidden"> Oculta</label>
+          </div>
+          <button type="button" class="wifi-apply">Aplicar 2.4 GHz</button>
         </div>
-        <label>Nombre de red (SSID)<input id="wifi-ssid" placeholder="Dejar vacío = no cambiar"></label>
-        <label>Contraseña WiFi<input id="wifi-pass" placeholder="Mín. 8 caracteres (vacío = no cambiar)"></label>
-        <div class="row">
-          <label>Canal<input id="wifi-channel" type="number" min="0" max="196" placeholder="opcional"></label>
-          <label class="chk"><input type="checkbox" id="wifi-enable" checked> Radio encendido</label>
-          <label class="chk"><input type="checkbox" id="wifi-hidden"> Ocultar red</label>
+          <div class="wifi-block card-form" data-band="5g">
+          <h3 style="margin-top:0">WiFi 5 GHz</h3>
+          <label>Nombre de red (SSID)<input class="w-ssid" placeholder="vacío = no cambiar"></label>
+          <label>Contraseña WiFi<input class="w-pass" placeholder="mín. 8 (vacío = no cambiar)"></label>
+          <div class="row">
+            <label>Canal<input class="w-chan" type="number" min="0" max="196" placeholder="opcional"></label>
+            <label class="chk"><input type="checkbox" class="w-enable" checked> Encendido</label>
+            <label class="chk"><input type="checkbox" class="w-hidden"> Oculta</label>
+          </div>
+          <button type="button" class="wifi-apply">Aplicar 5 GHz</button>
         </div>
-        <button data-action="wifi">Aplicar WiFi</button>
+        </div>
       </div>
 
       <div class="panel hidden" data-panel="net">

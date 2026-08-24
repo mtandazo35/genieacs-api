@@ -228,8 +228,17 @@ document.addEventListener("click", (e) => {
 });
 
 function prefillForms(st) {
-  $("#wifi-band").value = "2g";
-  $("#wifi-ssid").value = ""; $("#wifi-pass").value = "";
+  // WiFi: precargar cada banda con lo que reporta el equipo (clave siempre vacia)
+  $$(".wifi-block").forEach(block => {
+    const b = block.dataset.band;
+    const set = (sel, v) => { const el = block.querySelector(sel); if (el) el.value = (v == null ? "" : v); };
+    set(".w-ssid", st[`wifi_${b}_ssid`]);
+    set(".w-pass", "");
+    set(".w-chan", st[`wifi_${b}_channel`]);
+    const en = block.querySelector(".w-enable"), hi = block.querySelector(".w-hidden");
+    if (en) en.checked = st[`wifi_${b}_enable`] !== false;
+    if (hi) hi.checked = st[`wifi_${b}_hidden`] === true;
+  });
   $("#net-ip").value = ""; $("#net-mask").value = "";
 }
 
@@ -562,19 +571,33 @@ function refreshAfterChange(r) {
 // vacia los campos indicados tras aplicar un cambio
 function clearInputs(...ids) { ids.forEach(id => { const el = $("#" + id); if (el) el.value = ""; }); }
 
+// aplica la config de una banda WiFi (2g / 5g) leyendo su bloque
+async function applyWifi(block) {
+  const band = block.dataset.band;
+  const q = (sel) => block.querySelector(sel);
+  const body = { band };
+  if (q(".w-ssid").value.trim()) body.ssid = q(".w-ssid").value.trim();
+  if (q(".w-pass").value) body.password = q(".w-pass").value;
+  body.enable = q(".w-enable").checked;
+  if (q(".w-chan").value) body.channel = +q(".w-chan").value;
+  body.hidden = q(".w-hidden").checked;
+  const r = await api(`/devices/${enc(S.current)}/wifi`, { method: "PUT", body });
+  report(r); refreshAfterChange(r);
+  q(".w-pass").value = "";   // la clave no queda en pantalla; SSID/canal se recargan del status
+}
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest(".wifi-apply");
+  if (!btn) return;
+  const block = btn.closest(".wifi-block");
+  if (!block || !S.current) return;
+  btn.disabled = true;
+  try { await applyWifi(block); } catch (err) { toast(err.message, "err"); }
+  finally { btn.disabled = false; }
+});
+
 // ===== Acciones =====
 const actions = {
-  async wifi() {
-    const body = { band: $("#wifi-band").value };
-    if ($("#wifi-ssid").value.trim()) body.ssid = $("#wifi-ssid").value.trim();
-    if ($("#wifi-pass").value) body.password = $("#wifi-pass").value;
-    body.enable = $("#wifi-enable").checked;
-    if ($("#wifi-channel").value) body.channel = +$("#wifi-channel").value;
-    body.hidden = $("#wifi-hidden").checked;
-    const r = await api(`/devices/${enc(S.current)}/wifi`, { method: "PUT", body });
-    report(r); refreshAfterChange(r);
-    clearInputs("wifi-ssid", "wifi-pass", "wifi-channel");
-  },
+  // WiFi se aplica por banda (2.4G / 5G) desde applyWifi(); ver handler abajo.
   async net() {
     const body = {};
     if ($("#net-ip").value.trim()) body.lan_ip = $("#net-ip").value.trim();

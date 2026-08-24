@@ -101,7 +101,6 @@ button.small{padding:.3rem .6rem;font-size:.8rem}
   max-width:860px;width:100%;min-height:480px}
 .panel.wide{max-width:860px}
 /* los formularios cortos no estiran los campos a lo ancho */
-.panel[data-panel="wifi"] > *:not(.row),
 .panel[data-panel="net"] > *,
 .panel[data-panel="wan"] > *,
 .panel[data-panel="pppoe"] > *,
