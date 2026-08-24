@@ -60,6 +60,15 @@ Panel web / Mikrowisp / técnico
 | PUT  | `/auth/users/{u}/password` | `{new_password}` resetear clave de otro |
 | POST | `/auth/users/{u}/active` | `{active:bool}` activar/desactivar |
 | DELETE | `/auth/users/{u}` | eliminar (no el último admin ni a sí mismo) |
+| GET  | `/auth/audit` | registro de auditoría global (admin): cada cambio, con detalle |
+
+### Auditoría / historial
+El registro guarda **qué** se hizo (frase legible: "Acceso remoto ACTIVADO", "cambio de clave WiFi 2.4G", "WAN → PPPoE", "Reinicio programado 03:00", "Creó usuario X"…), quién, cuándo, equipo y resultado. Las lecturas/refrescos no se registran. El panel pagina de 20 en 20.
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/auth/audit` | actividad global de la flota (admin) |
+| GET | `/devices/{id}/audit` | historial de cambios de un equipo (respeta tenencia) |
 
 ### Equipos
 | Método | Ruta | Descripción |
@@ -72,6 +81,8 @@ Panel web / Mikrowisp / técnico
 | GET  | `/devices/{id}/params?search=&writable_only=` | **todo** el árbol del modelo (Avanzado) |
 | PUT  | `/devices/{id}/param` | `{path,value,type?}` escribir cualquier parámetro |
 | GET  | `/devices/{id}/hosts` | clientes conectados (LAN hosts): hostname, IP, MAC, conexión, activo |
+| POST | `/devices/{id}/diag/ping` | `{host, count?}` ping desde el equipo (TR-098/TR-181) |
+| POST | `/devices/{id}/diag/traceroute` | `{host, max_hops?, tries?}` traceroute desde el equipo |
 
 ### Identificación (nombre / cliente)
 > **Distinto de los tags de GenieACS.** El nombre/cliente es un campo propio del panel (BD SQLite), pensado como identificación legible del abonado. Los *tags* de GenieACS son para agrupar/filtrar y disparar presets. Cambiar un tag en GenieACS **no** cambia el nombre del panel, y viceversa.
@@ -90,6 +101,8 @@ Panel web / Mikrowisp / técnico
 | PUT | `/devices/{id}/wan` | `{mode:"dhcp"}` · `{mode:"static", ip, mask, gateway, dns?, mtu?}` · `{mode:"pppoe", username, password?}` |
 | PUT | `/devices/{id}/dns` | `{scope:"lan"\|"wan", servers:[...]}` |
 | PUT | `/devices/{id}/time` | `{timezone?, ntp1?, ntp2?}` |
+| GET/PUT | `/devices/{id}/access` | acceso remoto WAN `{remote_enable, remote_port?, remote_protocol("HTTP"\|"HTTPS")?}` + admin del equipo `{admin_user?, admin_password?}` |
+| GET/PUT | `/devices/{id}/ipv6-config` | activar IPv6 en la WAN `{enable, type("Auto"\|"DHCPv6"\|"SLAAC"\|"PPPoE"\|"Static")}` (modelos que lo exponen) |
 
 **WAN — validaciones de seguridad (modo static):** IP/máscara/gateway válidos, gateway en la misma subred que la IP, y la nueva IP debe estar en la **misma red que la IP WAN actual** del equipo (si no → `400`), para no perder el enlace con el ACS. Se escribe en la **conexión WAN activa**, no en una instancia fija.
 
@@ -149,9 +162,15 @@ curl -X PUT "$BASE/devices/$DEV/label" -H "$H" -H 'Content-Type: application/jso
 - **Un CPE puede tener varias conexiones WAN a la vez** (WANIPConnection.1/.2 + WANPPPConnection.1). La API detecta y usa la **activa** (Connected); leer una instancia fija daba información falsa (DHCP vs Static vs PPPoE).
 - **Nombre/cliente ≠ tags de GenieACS** (ver sección Identificación).
 
-## Soporte de modelos
+## Soporte de modelos (TR-098 y TR-181)
 
-La traducción concepto→path TR-069 vive en [app/parammap.py](app/parammap.py). Trae el mapa **TR-098** probado en Cudy WR3000/AX3000. Para otra marca: agregar un dict con sus paths y mapearlo en `pick_map()` según `Manufacturer`/`ProductClass`. Lo que un modelo no exponga (p.ej. IPv6 o máx. de clientes en el WR3000) simplemente no aparece; el explorador **Avanzado** (`/params`) muestra el árbol real.
+La traducción concepto→path TR-069 vive en [app/parammap.py](app/parammap.py) con dos mapas: **TR-098** (`InternetGatewayDevice.*`, probado en Cudy WR3000/AX3000) y **TR-181** (`Device.*`, probado en TP-Link EX511). `pick_map()` elige automáticamente según la **raíz que reporta cada equipo**, así una flota mixta funciona sin cambiar la config de los CPE. Para otra marca: agregar/ajustar el dict correspondiente.
+
+Lo que un modelo no exponga simplemente no aparece (p.ej. IPv6 o máx. de clientes en el WR3000; clave WiFi write-only en el EX511); el explorador **Avanzado** (`/params`) muestra el árbol real de cualquier equipo.
+
+Limitaciones actuales por modelo de datos:
+- **WAN DHCP/estático**: solo TR-098. **PPPoE**: TR-098 y TR-181. En TR-181 lo demás vía Avanzado.
+- **Acceso remoto**: TR-098 (Enable+Port) y TR-181 (Enable+Port+Protocol, el TP-Link exige también los `X_TP_*`). Un solo servicio remoto por equipo (no puertos HTTP/HTTPS separados si el firmware no los expone).
 
 ## Notas / pendientes
 

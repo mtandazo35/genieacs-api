@@ -2,6 +2,28 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
+## [1.2.0] - 2026-08-23
+
+### Añadido
+- **Soporte TR-181** además de TR-098: `pick_map()` elige el mapa por la raíz que reporta el equipo (`InternetGatewayDevice`→TR-098, `Device`→TR-181), sin tocar la config del CPE. Probado en TP-Link EX511 (WiFi, LAN, WAN, PPPoE, clientes, MAC, info).
+- **Modelo real** mostrado desde `DeviceInfo.ModelName` (ya no el ProductClass genérico tipo "Device2").
+- **Apartado Acceso**: acceso remoto por WAN (habilitar + puerto + protocolo **HTTP/HTTPS** por checkbox) y usuario/clave admin del equipo (donde el modelo lo exponga). `GET/PUT /devices/{id}/access`.
+- **IPv6 (activación)**: habilitar IPv6 en la WAN + método (Auto/DHCPv6/SLAAC/PPPoE/Static) en modelos que lo exponen (TR-181). `GET/PUT /devices/{id}/ipv6-config`.
+- **Diagnóstico** ping/traceroute desde el equipo, consciente del modelo (TR-098 `IPPingDiagnostics` / TR-181 `Device.IP.Diagnostics.IPPing`). `POST /devices/{id}/diag/ping|traceroute`.
+- **Clientes (LAN hosts)**: `GET /devices/{id}/hosts` (hostname, IP, MAC, conexión, activo).
+- **Identificación de abonado**: nombre + cliente + nota por equipo. `GET/PUT /devices/{id}/label`.
+- **Auditoría e historial**: registro detallado de cada cambio (con el detalle real: "Acceso remoto ACTIVADO", "cambio de clave WiFi", "WAN → PPPoE", etc.). `GET /auth/audit` (global, admin) y `GET /devices/{id}/audit` (por equipo). Paginación de 20 en 20; las lecturas no se registran.
+- Ficha por secciones con MAC (de la conexión activa), clientes conectados por radio, clave PPPoE revelable; WAN muestra todas las conexiones y marca la activa.
+- Favicon propio (SVG).
+
+### Cambiado
+- Pestaña "Red / IP" renombrada a **"Red LAN"**.
+- El envío de firmware/config y las operaciones detectan el tipo automáticamente.
+
+### Notas / límites
+- **Config WAN DHCP/estático** por ahora solo TR-098; **PPPoE** soportado en ambos. En TR-181 lo demás vía Avanzado.
+- El EX511 no expone por TR-069: clave WiFi legible (write-only), toggle de ping WAN, ni puertos HTTP/HTTPS separados (un solo RemoteAccess).
+
 ## [1.1.0] - 2026-08-23
 
 ### Añadido
