@@ -133,3 +133,5 @@ button.small{padding:.3rem .6rem;font-size:.8rem}
 .toast.ok{background:var(--ok);color:#052e16}
 .toast.err{background:var(--err);color:#450a0a}
 .toast.info{background:var(--accent2);color:#06283d}
+
+.pager{display:flex;gap:.8rem;align-items:center;justify-content:center;margin-top:1rem}

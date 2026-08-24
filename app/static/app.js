@@ -285,16 +285,34 @@ function actionLabel(a) {
   return `${a.method} ${act}`;
 }
 function auditStatus(s) { return (s >= 200 && s < 300 ? "✅ " : "⚠ ") + (s || ""); }
+// texto: las entradas nuevas ya traen la frase detallada; las viejas usan actionLabel
+function auditText(a) { return (a.action && a.action.includes(" ")) ? a.action : actionLabel(a); }
+// paginador reutilizable (20 por página)
+const PAGE_SIZE = 20;
+function renderPager(sel, page, pages, go) {
+  const el = $(sel);
+  if (pages <= 1) { el.innerHTML = ""; return; }
+  el.innerHTML = `<button class="ghost small" ${page <= 0 ? "disabled" : ""} data-pg="prev">‹ Anterior</button>
+    <span class="muted small">Página ${page + 1} de ${pages}</span>
+    <button class="ghost small" ${page >= pages - 1 ? "disabled" : ""} data-pg="next">Siguiente ›</button>`;
+  el.querySelectorAll("[data-pg]").forEach(b => b.onclick = () => go(b.dataset.pg === "next" ? page + 1 : page - 1));
+}
 
 // historial de cambios de este equipo
+let devAudit = [], devAuditPage = 0;
 async function loadDeviceAudit() {
-  try {
-    const rows = await api(`/devices/${enc(S.current)}/audit`);
-    $("#history-count").textContent = `${rows.length} evento(s)`;
-    $("#history-table tbody").innerHTML = rows.length
-      ? rows.map(a => `<tr><td>${esc(fmtAuditDate(a.ts))}</td><td>${esc(a.user || "?")}</td><td>${esc(actionLabel(a))}</td><td>${auditStatus(a.status)}</td></tr>`).join("")
-      : `<tr><td colspan="4" class="muted">Sin cambios registrados en este equipo.</td></tr>`;
-  } catch (e) { toast(e.message, "err"); }
+  try { devAudit = await api(`/devices/${enc(S.current)}/audit`); devAuditPage = 0; renderDevAudit(); }
+  catch (e) { toast(e.message, "err"); }
+}
+function renderDevAudit() {
+  const pages = Math.max(1, Math.ceil(devAudit.length / PAGE_SIZE));
+  if (devAuditPage >= pages) devAuditPage = pages - 1;
+  const rows = devAudit.slice(devAuditPage * PAGE_SIZE, devAuditPage * PAGE_SIZE + PAGE_SIZE);
+  $("#history-count").textContent = `${devAudit.length} evento(s)`;
+  $("#history-table tbody").innerHTML = rows.length
+    ? rows.map(a => `<tr><td>${esc(fmtAuditDate(a.ts))}</td><td>${esc(a.user || "?")}</td><td>${esc(auditText(a))}</td><td>${auditStatus(a.status)}</td></tr>`).join("")
+    : `<tr><td colspan="4" class="muted">Sin cambios registrados en este equipo.</td></tr>`;
+  renderPager("#history-pager", devAuditPage, pages, p => { devAuditPage = p; renderDevAudit(); });
 }
 $("#history-refresh").addEventListener("click", loadDeviceAudit);
 
@@ -727,25 +745,27 @@ document.addEventListener("click", async (e) => {
 });
 
 // ===== Actividad / auditoría (admin) =====
-let auditCache = [];
+let auditCache = [], auditPage = 0;
 function fmtAuditDate(ts) { if (!ts) return "-"; const d = new Date(ts.replace(" ", "T") + "Z"); return isNaN(d) ? ts : d.toLocaleString(); }
 async function loadAudit() {
-  try {
-    auditCache = await api("/auth/audit");
-    renderAudit();
-  } catch (e) { toast(e.message, "err"); }
+  try { auditCache = await api("/auth/audit"); auditPage = 0; renderAudit(); }
+  catch (e) { toast(e.message, "err"); }
 }
 function renderAudit() {
   const q = ($("#audit-filter").value || "").toLowerCase();
   const nameOf = id => { const d = (S.devices || []).find(x => x.id === id); return d && d.name ? d.name : (id || "-"); };
-  const items = auditCache.filter(a => !q || (`${a.user} ${a.action} ${a.device_id || ""} ${a.method}`).toLowerCase().includes(q));
+  const all = auditCache.filter(a => !q || (`${a.user} ${a.action} ${a.device_id || ""}`).toLowerCase().includes(q));
+  const pages = Math.max(1, Math.ceil(all.length / PAGE_SIZE));
+  if (auditPage >= pages) auditPage = pages - 1;
+  const items = all.slice(auditPage * PAGE_SIZE, auditPage * PAGE_SIZE + PAGE_SIZE);
   $("#audit-table tbody").innerHTML = items.map(a =>
     `<tr><td>${esc(fmtAuditDate(a.ts))}</td><td>${esc(a.user || "?")}</td>
-     <td>${esc(actionLabel(a))}</td><td>${esc(nameOf(a.device_id))}</td>
+     <td>${esc(auditText(a))}</td><td>${esc(nameOf(a.device_id))}</td>
      <td>${auditStatus(a.status)}</td></tr>`).join("")
     || `<tr><td colspan="5" class="muted">Sin actividad registrada.</td></tr>`;
+  renderPager("#audit-pager", auditPage, pages, p => { auditPage = p; renderAudit(); });
 }
-$("#audit-filter").addEventListener("input", renderAudit);
+$("#audit-filter").addEventListener("input", () => { auditPage = 0; renderAudit(); });
 $("#audit-refresh").addEventListener("click", loadAudit);
 
 async function loadAccount() {
