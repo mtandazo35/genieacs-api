@@ -5,15 +5,23 @@ programados) para que paneles/facturacion no tengan que hablar TR-069 crudo.
 """
 import asyncio
 import json
+import logging
 import os
+import uuid
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import db
+from .config import get_settings, jwt_secret_problem
 from .db import init_db
 from .routers import auth, backup, config, devices, firmware, settings, system
 from .security import decode_token
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+log = logging.getLogger("genieacs_api")
 
 
 class NoCacheStatic(StaticFiles):
@@ -25,19 +33,27 @@ class NoCacheStatic(StaticFiles):
         resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         return resp
 
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    problem = jwt_secret_problem(get_settings().jwt_secret)
+    if problem:
+        # sin secreto fuerte cualquiera podria firmar tokens de admin
+        raise RuntimeError(f"{problem}. Genera uno: python3 -c \"import secrets;print(secrets.token_hex(32))\"")
+    init_db()
+    # bucle de auto-restauracion de config tras factory reset
+    task = asyncio.create_task(backup.enforce_loop())
+    yield
+    task.cancel()
+
+
 app = FastAPI(
     title="GenieACS API",
     description="Gestion de CPEs (WiFi, IP, PPPoE, DNS, actualizaciones, hora, "
                 "reinicios programados) multi-tenant por ISP, sobre GenieACS.",
-    version="1.0.0",
+    version="1.4.0",
+    lifespan=lifespan,
 )
-
-
-@app.on_event("startup")
-async def _startup():
-    init_db()
-    # bucle de auto-restauracion de config tras factory reset
-    asyncio.create_task(backup.enforce_loop())
 
 
 _AUDIT_PREFIXES = ("/devices", "/firmware", "/settings", "/auth/users", "/auth/me/password")
@@ -103,18 +119,40 @@ def _audit_detail(method, parts, b):
     return f"{method} {seg or '/'.join(parts[:2])}"
 
 
+_SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+}
+
+
 @app.middleware("http")
 async def audit_middleware(request: Request, call_next):
     """Registra cada cambio (POST/PUT/DELETE) con detalle legible."""
     method, path = request.method, request.url.path
+    rid = uuid.uuid4().hex[:16]
+    request.state.request_id = rid
+    # subidas de firmware: rechazar por tamano declarado antes de parsear el multipart
+    if path.startswith("/firmware/upload") and method == "POST":
+        cl = request.headers.get("content-length", "")
+        limit = get_settings().max_upload_mb * 1024 * 1024 + 1024 * 1024   # + margen multipart
+        if cl.isdigit() and int(cl) > limit:
+            return JSONResponse({"detail": f"Archivo demasiado grande (maximo {get_settings().max_upload_mb} MB)"},
+                                status_code=413)
     do_audit = method in ("POST", "PUT", "DELETE") and any(path.startswith(p) for p in _AUDIT_PREFIXES)
+    is_json = request.headers.get("content-type", "").startswith("application/json")
     body_bytes = b""
-    if do_audit:
+    if do_audit and is_json:
+        # solo JSON (pequeno) se lee aqui para el detalle; multipart (firmware) no
+        # se carga en memoria: el endpoint lo lee por bloques
         body_bytes = await request.body()
         async def _receive():
             return {"type": "http.request", "body": body_bytes, "more_body": False}
         request._receive = _receive
     response = await call_next(request)
+    response.headers["X-Request-ID"] = rid
+    for k, v in _SECURITY_HEADERS.items():
+        response.headers.setdefault(k, v)
     if do_audit:
         try:
             parts = path.strip("/").split("/")
@@ -128,12 +166,17 @@ async def audit_middleware(request: Request, call_next):
                 if data: user = data.get("sub", "?")
             device_id = parts[1] if parts[0] == "devices" and len(parts) >= 2 else None
             body = {}
-            if body_bytes and request.headers.get("content-type", "").startswith("application/json"):
+            if body_bytes:
                 try: body = json.loads(body_bytes)
-                except Exception: body = {}
-            db.add_audit(user, device_id, _audit_detail(method, parts, body), method, path, response.status_code)
+                except ValueError: body = {}
+            if not isinstance(body, dict):
+                body = {}
+            db.add_audit(user, device_id, _audit_detail(method, parts, body), method, path, response.status_code,
+                         request.client.host if request.client else None,
+                         request.headers.get("user-agent"), rid)
         except Exception:
-            pass
+            # la auditoria nunca debe tumbar la peticion, pero el fallo se registra
+            log.exception("no se pudo registrar auditoria de %s %s", method, path)
     return response
 
 

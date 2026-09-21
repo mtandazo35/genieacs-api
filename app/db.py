@@ -4,6 +4,7 @@ Un usuario pertenece a un ISP (isp_tag) o es admin (ve toda la flota).
 La multi-tenencia se apoya en los tags de GenieACS: cada CPE de un ISP debe
 llevar el tag == isp_tag del usuario.
 """
+import os
 import sqlite3
 from contextlib import contextmanager
 
@@ -48,6 +49,18 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 """
 
+# Columnas anadidas despues de la primera version: se agregan en BDs existentes.
+_MIGRATIONS = {
+    "users": {"token_version": "INTEGER NOT NULL DEFAULT 0"},
+    "audit_log": {"client_ip": "TEXT", "user_agent": "TEXT", "request_id": "TEXT"},
+    "device_config": {
+        "attempts": "INTEGER NOT NULL DEFAULT 0",   # reaplicaciones seguidas sin corregir el drift
+        "last_attempt": "TEXT",                      # ISO UTC del ultimo reintento
+        "suspended_until": "TEXT",                   # ISO UTC; auto-restauracion en pausa
+        "last_error": "TEXT",
+    },
+}
+
 
 @contextmanager
 def connect():
@@ -63,6 +76,16 @@ def connect():
 def init_db() -> None:
     with connect() as c:
         c.executescript(_SCHEMA)
+        for table, cols in _MIGRATIONS.items():
+            have = {r["name"] for r in c.execute(f"PRAGMA table_info({table})")}
+            for col, ddl in cols.items():
+                if col not in have:
+                    c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+    # guarda claves de CPE (WiFi/PPPoE/admin): solo legible por el servicio
+    try:
+        os.chmod(get_settings().db_path, 0o600)
+    except OSError:
+        pass
 
 
 def get_user(username: str) -> dict | None:
@@ -89,13 +112,17 @@ def list_users() -> list[dict]:
 
 
 def set_active(username: str, active: bool) -> None:
+    # desactivar/reactivar invalida los tokens emitidos antes
     with connect() as c:
-        c.execute("UPDATE users SET active=? WHERE username=?", (1 if active else 0, username))
+        c.execute("UPDATE users SET active=?, token_version=token_version+1 WHERE username=?",
+                  (1 if active else 0, username))
 
 
 def update_password(username: str, password_hash: str) -> None:
+    # cambiar la clave cierra todas las sesiones abiertas de ese usuario
     with connect() as c:
-        c.execute("UPDATE users SET password=? WHERE username=?", (password_hash, username))
+        c.execute("UPDATE users SET password=?, token_version=token_version+1 WHERE username=?",
+                  (password_hash, username))
 
 
 def delete_user(username: str) -> None:
@@ -128,7 +155,8 @@ def set_autorestore(device_id: str, enabled: bool) -> None:
     with connect() as c:
         c.execute(
             "INSERT INTO device_config (device_id, autorestore, updated_at) VALUES (?,?,datetime('now')) "
-            "ON CONFLICT(device_id) DO UPDATE SET autorestore=excluded.autorestore",
+            "ON CONFLICT(device_id) DO UPDATE SET autorestore=excluded.autorestore, "
+            "attempts=0, suspended_until=NULL, last_error=NULL",   # re-activar = empezar de cero
             (device_id, 1 if enabled else 0),
         )
 
@@ -136,8 +164,19 @@ def set_autorestore(device_id: str, enabled: bool) -> None:
 def list_autorestore() -> list[dict]:
     with connect() as c:
         return [dict(r) for r in c.execute(
-            "SELECT device_id, config FROM device_config WHERE autorestore=1 AND config IS NOT NULL"
+            "SELECT device_id, config, attempts, last_attempt, suspended_until "
+            "FROM device_config WHERE autorestore=1 AND config IS NOT NULL"
         ).fetchall()]
+
+
+def set_autorestore_state(device_id: str, attempts: int, last_attempt: str | None,
+                          suspended_until: str | None, last_error: str | None) -> None:
+    with connect() as c:
+        c.execute(
+            "UPDATE device_config SET attempts=?, last_attempt=?, suspended_until=?, last_error=? "
+            "WHERE device_id=?",
+            (attempts, last_attempt, suspended_until, last_error, device_id),
+        )
 
 
 # ---- nombre/cliente por equipo ----
@@ -164,11 +203,14 @@ def all_device_meta() -> dict:
 
 
 # ---- auditoria (registro de cambios) ----
-def add_audit(user, device_id, action, method, path, status) -> None:
+def add_audit(user, device_id, action, method, path, status,
+              client_ip=None, user_agent=None, request_id=None) -> None:
     with connect() as c:
         c.execute(
-            "INSERT INTO audit_log (user, device_id, action, method, path, status) VALUES (?,?,?,?,?,?)",
-            (user, device_id, action, method, path, status),
+            "INSERT INTO audit_log (user, device_id, action, method, path, status, "
+            "client_ip, user_agent, request_id) VALUES (?,?,?,?,?,?,?,?,?)",
+            (user, device_id, action, method, path, status,
+             client_ip, (user_agent or "")[:300] or None, request_id),
         )
 
 

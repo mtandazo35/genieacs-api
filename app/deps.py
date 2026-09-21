@@ -27,7 +27,11 @@ async def current_user(token: str = Depends(oauth2)) -> CurrentUser:
     u = db.get_user(data["sub"])
     if not u or not u["active"]:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Usuario inexistente o desactivado")
-    return CurrentUser(data["sub"], data.get("role", "isp"), data.get("isp"))
+    # tokens emitidos antes de un cambio de clave/desactivacion quedan revocados
+    if data.get("uid") != u["id"] or data.get("ver") != u["token_version"]:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sesion revocada; vuelve a iniciar sesion")
+    # rol e ISP salen de la BD, nunca del token
+    return CurrentUser(u["username"], u["role"], u["isp_tag"])
 
 
 async def require_admin(user: CurrentUser = Depends(current_user)) -> CurrentUser:

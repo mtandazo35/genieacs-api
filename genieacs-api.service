@@ -4,11 +4,36 @@ After=network.target genieacs-nbi.service
 
 [Service]
 User=genieacs
+Group=genieacs
 WorkingDirectory=/opt/genieacs-api
 EnvironmentFile=/opt/genieacs-api/.env
-ExecStart=/opt/genieacs-api/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8080
+# Solo localhost: el acceso es por el reverse proxy HTTPS (Caddy, lo instala
+# install.sh). --proxy-headers toma la IP real del cliente del X-Forwarded-For
+# que pone el proxy local (auditoria y limite de intentos de login).
+ExecStart=/opt/genieacs-api/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8080 --proxy-headers --forwarded-allow-ips=127.0.0.1
 Restart=on-failure
 RestartSec=5
+
+# Endurecimiento
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=full
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+LimitNOFILE=65536
+TasksMax=512
 
 [Install]
 WantedBy=multi-user.target

@@ -282,7 +282,7 @@
       <form id="user-form" class="card-form">
         <div class="row">
           <label>Usuario<input id="u-name" required></label>
-          <label>Contraseña<input id="u-pass" type="password" required></label>
+          <label>Contraseña<input id="u-pass" type="password" minlength="12" maxlength="128" autocomplete="new-password" required></label>
         </div>
         <div class="row">
           <label>Rol
@@ -310,8 +310,8 @@
         <h3>Cambiar mi contraseña</h3>
         <div id="account-who" class="muted small"></div>
         <label>Contraseña actual<input id="acc-current" type="password" required></label>
-        <label>Contraseña nueva<input id="acc-new" type="password" minlength="6" required></label>
-        <label>Repetir contraseña nueva<input id="acc-new2" type="password" minlength="6" required></label>
+        <label>Contraseña nueva<input id="acc-new" type="password" minlength="12" maxlength="128" autocomplete="new-password" required></label>
+        <label>Repetir contraseña nueva<input id="acc-new2" type="password" minlength="12" maxlength="128" autocomplete="new-password" required></label>
         <button type="submit">Cambiar contraseña</button>
       </form>
     </section>

@@ -1,8 +1,8 @@
 """Listado y estado de dispositivos (filtrado por ISP)."""
 import asyncio
 
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from typing import Any, Optional
 
 from .. import db
@@ -22,9 +22,29 @@ class BulkReadIn(BaseModel):
 
 
 class ParamIn(BaseModel):
-    path: str
+    path: str = Field(..., max_length=512)
     value: Any
-    type: Optional[str] = None   # xsd:string / xsd:boolean / xsd:unsignedInt ...
+    type: Optional[str] = Field(None, max_length=32)   # xsd:string / xsd:boolean / xsd:unsignedInt ...
+
+
+# Parametros que un usuario ISP NO puede escribir por el editor avanzado:
+# ManagementServer contiene URL/usuario/clave del ACS y del connection request;
+# cambiarlos saca al equipo del ACS (o lo lleva a otro). Solo admin.
+ISP_DENIED_SEGMENTS = ("ManagementServer",)
+# raices escribibles por un ISP (el resto -- p.ej. Tags.* -- no son del CPE)
+ISP_WRITABLE_ROOTS = ("InternetGatewayDevice.", "Device.")
+
+
+def isp_param_problem(path: str) -> str | None:
+    if not path.startswith(ISP_WRITABLE_ROOTS):
+        return "Ruta fuera del arbol del equipo"
+    if any(seg in ISP_DENIED_SEGMENTS for seg in path.split(".")):
+        return "Parametro reservado al admin (ManagementServer: conexion con el ACS)"
+    return None
+
+
+def _is_secret_mgmt(path: str) -> bool:
+    return "ManagementServer" in path.split(".") and "password" in path.lower()
 
 
 class LabelIn(BaseModel):
@@ -403,7 +423,7 @@ async def read_status(device_id: str, dev=Depends(authorized_device)):
 
 @router.get("/{device_id}/params")
 async def list_params(device_id: str, search: str = "", writable_only: bool = False,
-                      dev=Depends(authorized_device)):
+                      dev=Depends(authorized_device), user: CurrentUser = Depends(current_user)):
     """Todos los parametros del equipo que el ACS conoce (arbol completo).
 
     Para traer TODO lo que el modelo expone, primero usar POST /refresh."""
@@ -418,13 +438,25 @@ async def list_params(device_id: str, search: str = "", writable_only: bool = Fa
                   or (p["value"] is not None and s in str(p["value"]).lower())]
     if writable_only:
         params = [p for p in params if p["writable"]]
+    if not user.is_admin:
+        # claves del ACS / connection request: ni se muestran ni se editan
+        for p in params:
+            if _is_secret_mgmt(p["path"]) and p["value"]:
+                p["value"] = "********"
+            if isp_param_problem(p["path"]):
+                p["writable"] = False
     params.sort(key=lambda x: x["path"])
     return {"count": len(params), "params": params}
 
 
 @router.put("/{device_id}/param")
-async def set_param(device_id: str, body: ParamIn, dev=Depends(authorized_device)):
+async def set_param(device_id: str, body: ParamIn, dev=Depends(authorized_device),
+                    user: CurrentUser = Depends(current_user)):
     """Escribe un parametro arbitrario del arbol (avanzado)."""
+    if not user.is_admin:
+        problem = isp_param_problem(body.path)
+        if problem:
+            raise HTTPException(403, problem)
     triple = [body.path, body.value] + ([body.type] if body.type else [])
     res = await genie.set_parameter_values(device_id, [triple])
     from .backup import merge_device_config

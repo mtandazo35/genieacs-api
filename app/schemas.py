@@ -1,6 +1,8 @@
 """Esquemas de entrada/salida (Pydantic)."""
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
+
+from .security import password_problem
 
 
 class LoginIn(BaseModel):
@@ -86,7 +88,15 @@ class ActionResult(BaseModel):
 
 
 class UserIn(BaseModel):
-    username: str
-    password: str = Field(..., min_length=6)
+    username: str = Field(..., min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._@-]+$")
+    password: str
     role: str = Field("isp", pattern="^(admin|isp)$")
-    isp_tag: Optional[str] = None
+    isp_tag: Optional[str] = Field(None, max_length=64)
+
+    @field_validator("password")
+    @classmethod
+    def _policy(cls, v: str) -> str:
+        problem = password_problem(v)
+        if problem:
+            raise ValueError(problem)
+        return v

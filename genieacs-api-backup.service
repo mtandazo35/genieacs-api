@@ -1,0 +1,11 @@
+[Unit]
+Description=Respaldo diario de la BD de GenieACS API (SQLite)
+
+[Service]
+Type=oneshot
+User=genieacs
+Group=genieacs
+WorkingDirectory=/opt/genieacs-api
+EnvironmentFile=/opt/genieacs-api/.env
+UMask=0077
+ExecStart=/opt/genieacs-api/.venv/bin/python manage.py backup-db /var/backups/genieacs-api 14

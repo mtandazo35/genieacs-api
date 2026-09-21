@@ -10,10 +10,10 @@ Reinicios programados = provision en GenieACS (decision de diseno):
 """
 import re
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from ..config import get_settings
-from ..deps import authorized_device, require_admin
+from ..deps import CurrentUser, authorized_device, current_user, require_admin
 from ..genieacs import genie
 from ..schemas import ActionResult, FirmwarefromServer, ScheduleRebootIn
 
@@ -121,9 +121,15 @@ async def clear_schedule(device_id: str, dev=Depends(authorized_device)):
 
 # --- firmware: envio individual (1 a 1). Gestion/masivo en routers/firmware.py
 @router.post("/devices/{device_id}/firmware", response_model=ActionResult)
-async def push_firmware(device_id: str, body: FirmwarefromServer, dev=Depends(authorized_device)):
-    from .firmware import file_type_of
+async def push_firmware(device_id: str, body: FirmwarefromServer, dev=Depends(authorized_device),
+                        user: CurrentUser = Depends(current_user)):
+    from .firmware import file_type_of, is_firmware
     ftype = await file_type_of(body.file_name)
+    if ftype is None:
+        raise HTTPException(404, "Archivo no encontrado en el ACS")
+    # un ISP solo instala firmware; los archivos de config de proveedor son del admin
+    if not user.is_admin and not is_firmware(ftype):
+        raise HTTPException(403, "Solo el admin puede enviar archivos de configuracion")
     res = await genie.download(device_id, body.file_name, file_type=ftype)
     kind = "Configuracion" if ftype.startswith("3") else "Firmware"
     return ActionResult(applied=res["applied"], queued=res["queued"],

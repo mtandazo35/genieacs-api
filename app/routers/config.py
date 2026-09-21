@@ -1,5 +1,6 @@
 """Configuracion del CPE: WiFi, IP/DHCP, DNS, PPPoE, hora/fecha."""
 import ipaddress
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,6 +11,8 @@ from ..genieacs import genie
 from ..parammap import pick_map, resolve
 from ..schemas import AccessIn, ActionResult, DnsIn, IpIn, PppoeIn, TimeIn, WanIn, WifiIn
 from .backup import merge_device_config
+
+log = logging.getLogger("genieacs_api.config")
 
 router = APIRouter(prefix="/devices/{device_id}", tags=["config"])
 
@@ -136,8 +139,8 @@ async def set_wan(device_id: str, body: WanIn, dev=Depends(authorized_device)):
                     f"o hazlo localmente en el equipo.")
         except HTTPException:
             raise
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning("WAN %s: no se pudo comprobar la red actual (%s); se aplica sin esa guarda", device_id, e)
         values = [
             [f"{prefix}.AddressingType", "Static", "xsd:string"],
             [f"{prefix}.ExternalIPAddress", body.ip, "xsd:string"],

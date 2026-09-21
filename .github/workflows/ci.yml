@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1"   # semanal: detecta CVEs nuevos en dependencias fijadas
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.10", "3.11", "3.13"]   # Ubuntu 22.04, Debian 12, Debian 13
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -r requirements-dev.txt
+      - name: pyflakes
+        run: python -m pyflakes app manage.py tests
+      - name: pruebas
+        run: python -m pytest -q tests
+      - name: pip-audit (CVEs en dependencias)
+        run: python -m pip_audit -r requirements.txt
+      - name: instalador
+        run: bash -n install.sh && shellcheck -S error install.sh

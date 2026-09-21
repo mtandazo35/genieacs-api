@@ -14,14 +14,14 @@ En la VM (Debian 12/13 o Ubuntu 22.04/24.04, como root):
 bash <(curl -fsSL https://raw.githubusercontent.com/mtandazo35/genieacs-api/main/install.sh)
 ```
 
-Instala dependencias, clona en `/opt/genieacs-api`, crea el entorno Python, pide la **URL del NBI de GenieACS**, crea el usuario **admin**, deja el servicio systemd `genieacs-api` en el puerto **8080** y abre el puerto en UFW si está activo.
+Instala dependencias, clona en `/opt/genieacs-api`, crea el entorno Python, pide la **URL del NBI de GenieACS**, crea el usuario **admin** (clave de 12+ caracteres), deja el servicio systemd `genieacs-api` escuchando **solo en `127.0.0.1:8080`** y lo publica por **HTTPS con Caddy** (Let's Encrypt si das un dominio; si no, certificado propio para la IP). Con UFW activo abre 443 y cierra el 8080 de versiones anteriores. Deja además un respaldo diario de la BD (`genieacs-api-backup.timer`).
 
 Modo no interactivo:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mtandazo35/genieacs-api/main/install.sh -o /root/install.sh
-bash /root/install.sh install     # instalar/actualizar
-bash /root/install.sh update      # solo actualizar código y reiniciar
+bash /root/install.sh install     # instalar/actualizar (con HTTPS)
+bash /root/install.sh update      # solo actualizar código y reiniciar (respalda la BD antes)
 bash /root/install.sh uninstall   # desinstalar
 ```
 
@@ -29,9 +29,12 @@ bash /root/install.sh uninstall   # desinstalar
 
 ```
 Panel web / Mikrowisp / técnico
-        │  HTTP + JWT (Bearer)
+        │  HTTPS :443 + JWT (Bearer)
         ▼
-   genieacs-api  (FastAPI, :8080)   ── usuarios y metadatos en SQLite; filtro por tag de ISP
+      Caddy  (reverse proxy TLS)
+        │  127.0.0.1:8080
+        ▼
+   genieacs-api  (FastAPI)          ── usuarios y metadatos en SQLite; filtro por tag de ISP
         │  NBI HTTP :7557
         ▼
      GenieACS  (cwmp/nbi/fs/ui)     ── habla TR-069 con los CPEs
@@ -39,7 +42,7 @@ Panel web / Mikrowisp / técnico
 
 - **Multi-tenant por ISP**: cada CPE lleva un **tag** con el nombre del ISP. Un usuario `isp` solo ve/gestiona equipos con **su** tag; un `admin` ve toda la flota.
 - **`$DEV`** en los ejemplos es el `_id` tal cual lo devuelve `/devices`. La API se encarga del `%`-encoding hacia GenieACS; en tus llamadas HTTP debes URL-encodearlo (el `_id` suele traer `%20`/`%2E`).
-- Autenticación: `Authorization: Bearer <token>` en todo salvo `/auth/login`, `/health` y los estáticos del panel.
+- Autenticación: `Authorization: Bearer <token>` en todo salvo `/auth/login`, `/health` y los estáticos del panel. El token dura 8 h, pero **cambiar la clave o desactivar al usuario lo revoca al instante**; rol e ISP se leen siempre de la BD, no del token.
 
 ## Referencia de la API
 
@@ -48,9 +51,9 @@ Panel web / Mikrowisp / técnico
 ### Autenticación y cuenta
 | Método | Ruta | Rol | Descripción |
 |---|---|---|---|
-| POST | `/auth/login` | público | form `username`,`password` → `{access_token, role, isp}` |
+| POST | `/auth/login` | público | form `username`,`password` → `{access_token, role, isp}`. Tras 5 fallos/min por IP o 20/hora por usuario → `429` con `Retry-After` |
 | GET  | `/auth/me` | cualquiera | datos del usuario actual |
-| PUT  | `/auth/me/password` | cualquiera | `{current_password, new_password}` cambiar la propia clave |
+| PUT  | `/auth/me/password` | cualquiera | `{current_password, new_password}` cambiar la propia clave (12+ caracteres). Cierra las demás sesiones y devuelve un `access_token` nuevo |
 
 ### Usuarios (solo admin)
 | Método | Ruta | Descripción |
@@ -63,7 +66,7 @@ Panel web / Mikrowisp / técnico
 | GET  | `/auth/audit` | registro de auditoría global (admin): cada cambio, con detalle |
 
 ### Auditoría / historial
-El registro guarda **qué** se hizo (frase legible: "Acceso remoto ACTIVADO", "cambio de clave WiFi 2.4G", "WAN → PPPoE", "Reinicio programado 03:00", "Creó usuario X"…), quién, cuándo, equipo y resultado. Las lecturas/refrescos no se registran. El panel pagina de 20 en 20.
+El registro guarda **qué** se hizo (frase legible: "Acceso remoto ACTIVADO", "cambio de clave WiFi 2.4G", "WAN → PPPoE", "Reinicio programado 03:00", "Creó usuario X"…), quién, cuándo, equipo, resultado, **IP de origen, User-Agent y un `request_id`** (el mismo de la cabecera `X-Request-ID` de la respuesta). También quedan los logins correctos, fallidos y bloqueados. Las lecturas/refrescos no se registran. El panel pagina de 20 en 20.
 
 | Método | Ruta | Descripción |
 |---|---|---|
@@ -79,7 +82,7 @@ El registro guarda **qué** se hizo (frase legible: "Acceso remoto ACTIVADO", "c
 | POST | `/devices/{id}/refresh?object=` | GetParameterNames de la raíz (o del `object` dado) |
 | POST | `/devices/read-bulk` | lectura masiva `{all\|tag\|model\|device_ids}` (respeta tenencia) |
 | GET  | `/devices/{id}/params?search=&writable_only=` | **todo** el árbol del modelo (Avanzado) |
-| PUT  | `/devices/{id}/param` | `{path,value,type?}` escribir cualquier parámetro |
+| PUT  | `/devices/{id}/param` | `{path,value,type?}` escribir cualquier parámetro. Un usuario ISP no puede tocar `*.ManagementServer.*` (URL/usuario/clave del ACS: sacarían el equipo del ACS) ni rutas fuera de `InternetGatewayDevice.`/`Device.`; en `/params` ve esas claves enmascaradas |
 | GET  | `/devices/{id}/hosts` | clientes conectados (LAN hosts): hostname, IP, MAC, conexión, activo |
 | POST | `/devices/{id}/diag/ping` | `{host, count?}` ping desde el equipo (TR-098/TR-181) |
 | POST | `/devices/{id}/diag/traceroute` | `{host, max_hops?, tries?}` traceroute desde el equipo |
@@ -112,24 +115,24 @@ El registro guarda **qué** se hizo (frase legible: "Acceso remoto ACTIVADO", "c
 | POST | `/devices/{id}/reboot` | reinicio inmediato |
 | POST | `/devices/{id}/factory-reset` | (admin) restaurar de fábrica |
 | GET/PUT/DELETE | `/devices/{id}/schedule-reboot` | reinicio programado diario `{hour, minute}` |
-| POST | `/devices/{id}/firmware` | empujar un archivo ya cargado `{file_name}` (detecta si es firmware o config) |
+| POST | `/devices/{id}/firmware` | empujar un archivo ya cargado `{file_name}` (detecta si es firmware o config; un ISP solo puede enviar firmware) |
 
 ### Respaldo / auto-restauración
 | Método | Ruta | Descripción |
 |---|---|---|
 | POST | `/devices/{id}/backup` | guarda la config actual como respaldo |
-| GET  | `/devices/{id}/backup` | ver respaldo + estado auto-restauración |
+| GET  | `/devices/{id}/backup` | ver respaldo + estado auto-restauración (las claves salen como `********`: se guardan para restaurar, pero no se devuelven) |
 | POST | `/devices/{id}/restore` | reaplica la config guardada |
 | POST | `/devices/{id}/autorestore` | `{enabled:bool}` vigilar y reaplicar tras factory reset |
 
-El respaldo **se fusiona con cada cambio** aplicado (nunca queda viejo). Un bucle en la API detecta *drift* vs la config deseada y la reaplica **solo si el equipo vuelve a hablar con el ACS**.
+El respaldo **se fusiona con cada cambio** aplicado (nunca queda viejo). Un bucle en la API (cada 10 min) detecta *drift* vs la config deseada y la reaplica **solo si el equipo vuelve a hablar con el ACS**: no encola otra tarea hasta que el equipo haya reportado después del intento anterior, y si tras 3 intentos el equipo sigue sin conservar los valores, pausa la auto-restauración 6 h y deja el motivo en `last_error` (se ve en la pestaña Respaldo).
 
 ### Firmware / archivos (admin)
 | Método | Ruta | Descripción |
 |---|---|---|
-| GET  | `/firmware` | listar archivos cargados (firmware y config) |
-| POST | `/firmware/upload` | multipart `file` + `file_type(firmware\|config)` + `product_class?/oui?/version?` |
-| POST | `/firmware/upload-url` | `{url, file_name?, file_type, ...}` descarga server-side |
+| GET  | `/firmware` | listar archivos cargados (el admin ve firmware y config; un ISP solo firmware) |
+| POST | `/firmware/upload` | multipart `file` + `file_type(firmware\|config)` + `product_class?/oui?/version?`. Máx. 512 MB (`MAX_UPLOAD_MB`); responde con el `sha256` |
+| POST | `/firmware/upload-url` | `{url, file_name?, file_type, ...}` descarga server-side. Solo URLs públicas (o redes de `FIRMWARE_ALLOWED_NETWORKS`); cada redirección se revalida; responde con el `sha256` |
 | DELETE | `/firmware/{name}` | borrar |
 | POST | `/firmware/push` | envío masivo `{file_name, all\|tag\|model\|device_ids}` (encola; detecta el tipo) |
 
@@ -137,14 +140,14 @@ El respaldo **se fusiona con cada cambio** aplicado (nunca queda viejo). Un bucl
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET  | `/settings` | NBI URL efectiva + origen (bd/env) |
-| PUT  | `/settings` | `{nbi_url?, nbi_timeout?, default_connection_request?}` (aplica **sin reiniciar**) |
-| POST | `/settings/test` | `{nbi_url?}` probar conexión al NBI |
+| PUT  | `/settings` | `{nbi_url?, nbi_timeout?, default_connection_request?}` (aplica **sin reiniciar**). La URL debe resolver a una red de `ALLOWED_NBI_NETWORKS` (por defecto, privadas y loopback) |
+| POST | `/settings/test` | `{nbi_url?}` probar conexión al NBI (misma restricción) |
 
 ## Uso rápido
 
 ```bash
-BASE=http://localhost:8080
-TOKEN=$(curl -s -X POST $BASE/auth/login -d 'username=admin&password=ClaveFuerte' \
+BASE=https://panel.example.com          # o, en la propia VM: http://127.0.0.1:8080
+TOKEN=$(curl -s -X POST $BASE/auth/login -d 'username=admin&password=UnaClaveLarga123' \
   | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
 H="Authorization: Bearer $TOKEN"
 
@@ -172,7 +175,30 @@ Limitaciones actuales por modelo de datos:
 - **WAN DHCP/estático**: solo TR-098. **PPPoE**: TR-098 y TR-181. En TR-181 lo demás vía Avanzado.
 - **Acceso remoto**: TR-098 (Enable+Port) y TR-181 (Enable+Port+Protocol, el TP-Link exige también los `X_TP_*`). Un solo servicio remoto por equipo (no puertos HTTP/HTTPS separados si el firmware no los expone).
 
+## Seguridad
+
+Resumen de los controles (detalle operativo en [DEPLOY.md](DEPLOY.md#seguridad)):
+
+- **Perímetro**: la API solo escucha en `127.0.0.1` y se publica por HTTPS (Caddy). El servicio corre como `genieacs` con systemd endurecido (`ProtectSystem`, `NoNewPrivileges`, `UMask=0077`…).
+- **Sesiones**: secreto JWT obligatorio (32+ caracteres; sin él la API no arranca), tokens de 8 h revocables (`token_version`), claves de 12+ caracteres, límite de intentos de login.
+- **Multi-tenant**: el ISP solo ve y toca equipos con su tag, no puede escribir `ManagementServer` ni enviar archivos de configuración.
+- **Datos sensibles**: la BD (`chmod 600`) guarda claves de CPE para poder restaurarlas; la API no las devuelve en `/backup`. Respaldo diario consistente de la BD con retención de 14 copias.
+- **Peticiones salientes (anti-SSRF)**: firmware por URL solo a destinos públicos (o redes autorizadas) y NBI solo a redes autorizadas, validando cada IP resuelta y cada redirección.
+- **Dependencias**: versiones fijadas, revisadas con `pip-audit` en el CI (también semanal) y Dependabot.
+
+## Desarrollo y pruebas
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+.venv/bin/python -m pyflakes app manage.py tests
+.venv/bin/python -m pytest -q tests          # sin red ni GenieACS: usa un ACS falso en memoria
+.venv/bin/python -m pip_audit -r requirements.txt
+```
+
+Las pruebas (`tests/`) describen escenarios de ataque y de operación: un ISP que intenta sacar su equipo del ACS, un token robado tras cambiar la clave, una descarga de firmware que redirige a la red interna, un CPE apagado que no debe acumular tareas, la migración de una BD de la versión anterior… El CI las corre en Python 3.10, 3.11 y 3.13.
+
 ## Notas / pendientes
 
 - La zona horaria (`time`) se pasa tal cual; el formato válido depende del firmware.
-- **Poner TLS delante (reverse proxy) y firewall** si la API/panel sale de la red interna: expone login, claves WiFi/PPPoE y datos de clientes.
+- Las operaciones masivas (`/firmware/push`, `/devices/read-bulk`) recorren los equipos dentro de la petición HTTP; para decenas de miles de CPE convendría pasarlas a trabajos en segundo plano.
+- La tenencia se apoya en los tags de GenieACS: quien administra el ACS (o su UI) puede mover un equipo de ISP cambiando su tag.

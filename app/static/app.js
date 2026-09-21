@@ -25,7 +25,12 @@ async function api(path, { method = "GET", body = null, form = null } = {}) {
   if (res.status === 401) { logout(); throw new Error("Sesión expirada"); }
   let data = null;
   try { data = await res.json(); } catch { /* sin cuerpo */ }
-  if (!res.ok) throw new Error((data && (data.detail || data.message)) || ("Error " + res.status));
+  if (!res.ok) {
+    let msg = data && (data.detail || data.message);
+    // 422 de validacion: FastAPI devuelve una lista de errores
+    if (Array.isArray(msg)) msg = msg.map(d => (d.msg || "").replace(/^Value error, /, "")).join(" · ");
+    throw new Error(msg || ("Error " + res.status));
+  }
   return data;
 }
 
@@ -412,7 +417,10 @@ async function loadBackup() {
     $("#backup-auto").checked = !!b.autorestore;
     if (b.exists) {
       const n = Object.keys(b.params || {}).length;
-      $("#backup-info").textContent = `Respaldo guardado: ${n} parámetros · ${fmtDate(b.updated_at)}`;
+      let info = `Respaldo guardado: ${n} parámetros · ${fmtDate(b.updated_at)}`;
+      if (b.suspended_until) info += ` · Auto-restauración en pausa hasta ${fmtDate(b.suspended_until)}`;
+      if (b.last_error) info += ` · ${b.last_error}`;
+      $("#backup-info").textContent = info;
     } else {
       $("#backup-info").textContent = "Aún no hay respaldo. Pulsa \"Guardar respaldo\".";
     }
@@ -750,9 +758,9 @@ document.addEventListener("click", async (e) => {
   const u = b.dataset.u, act = b.dataset.uact;
   try {
     if (act === "pass") {
-      const p = prompt("Nueva contraseña para " + u + " (mín. 6):");
+      const p = prompt("Nueva contraseña para " + u + " (mín. 12):");
       if (!p) return;
-      if (p.length < 6) return toast("Mínimo 6 caracteres", "err");
+      if (p.length < 12) return toast("Mínimo 12 caracteres", "err");
       await api(`/auth/users/${encodeURIComponent(u)}/password`, { method: "PUT", body: { new_password: p } });
       toast("✓ Contraseña actualizada", "ok");
     } else if (act === "toggle") {
@@ -803,8 +811,10 @@ $("#account-form").addEventListener("submit", async (e) => {
   const cur = $("#acc-current").value, n1 = $("#acc-new").value, n2 = $("#acc-new2").value;
   if (n1 !== n2) return toast("Las contraseñas nuevas no coinciden", "err");
   try {
-    await api("/auth/me/password", { method: "PUT", body: { current_password: cur, new_password: n1 } });
-    toast("✓ Contraseña cambiada", "ok"); $("#account-form").reset();
+    const r = await api("/auth/me/password", { method: "PUT", body: { current_password: cur, new_password: n1 } });
+    // el cambio revoca las sesiones abiertas: seguir con el token nuevo
+    if (r.access_token) { S.token = r.access_token; localStorage.setItem("token", S.token); }
+    toast("✓ Contraseña cambiada (se cerraron las demás sesiones)", "ok"); $("#account-form").reset();
   } catch (err) { toast(err.message, "err"); }
 });
 
@@ -902,13 +912,13 @@ document.addEventListener("submit", async (e) => {
       fd.append("version", form.querySelector(".uf-version").value.trim());
       fd.append("oui", form.querySelector(".uf-oui").value.trim());
       const r = await api("/firmware/upload", { method: "POST", form: fd });
-      toast(`✓ Subido: ${r.file_name} (${(r.size/1024/1024).toFixed(1)} MB)`, "ok");
+      toast(`✓ Subido: ${r.file_name} (${(r.size/1024/1024).toFixed(1)} MB) · SHA256 ${String(r.sha256 || "").slice(0, 16)}…`, "ok");
       form.reset(); loadUpdates();
     } else if (form.classList.contains("up-url")) {
       const body = { url: form.querySelector(".uu-url").value.trim(), file_name: form.querySelector(".uu-name").value.trim()||null, file_type: kind, product_class: form.querySelector(".uu-model").value.trim(), version: form.querySelector(".uu-version").value.trim() };
       toast("Descargando desde el URL…", "info");
       const r = await api("/firmware/upload-url", { method: "POST", body });
-      toast(`✓ Guardado: ${r.file_name} (${(r.size/1024/1024).toFixed(1)} MB)`, "ok");
+      toast(`✓ Guardado: ${r.file_name} (${(r.size/1024/1024).toFixed(1)} MB) · SHA256 ${String(r.sha256 || "").slice(0, 16)}…`, "ok");
       form.reset(); loadUpdates();
     } else if (form.classList.contains("push-form")) {
       const file = form.querySelector(".pf-file").value;

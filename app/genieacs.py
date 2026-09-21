@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 from urllib.parse import quote
-from typing import Any, Optional
+from typing import Optional
 
 import httpx
 
@@ -139,10 +139,14 @@ class GenieACS:
 
     # ---- archivos (firmware) --------------------------------------------
     async def upload_file(
-        self, file_name: str, content: bytes, file_type="1 Firmware Upgrade Image",
-        oui: str = "", product_class: str = "", version: str = "",
+        self, file_name: str, content, file_type="1 Firmware Upgrade Image",
+        oui: str = "", product_class: str = "", version: str = "", size: int | None = None,
     ) -> None:
+        """content: bytes, o un iterable asincrono de bloques (con size) para no
+        cargar firmwares grandes en memoria."""
         headers = {"fileType": file_type}
+        if size is not None:
+            headers["Content-Length"] = str(size)
         if oui:
             headers["oui"] = oui
         if product_class:

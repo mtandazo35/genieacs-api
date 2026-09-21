@@ -2,6 +2,39 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
+## [1.4.0] - 2026-09-21
+
+Correcciones de la auditoría técnica de seguridad del 2026-09-21.
+
+### Seguridad
+- **Un ISP ya no puede sacar un equipo del ACS**: `PUT /devices/{id}/param` rechaza (`403`) para usuarios ISP cualquier ruta con `ManagementServer` (URL/usuario/clave del ACS y del connection request) o fuera de `InternetGatewayDevice.`/`Device.`; en `/params` esas claves salen enmascaradas y no editables. El admin mantiene el acceso completo.
+- **`GET /devices/{id}/backup` ya no devuelve claves** (WiFi, PPPoE, admin del equipo): salen como `********`. Se siguen guardando para restaurar.
+- **Sesiones revocables**: el JWT lleva `uid` + `token_version`; cambiar la clave (propia o por admin) o desactivar al usuario invalida sus tokens al instante. Rol e ISP se leen de la BD en cada petición, no del token. Borrar y recrear un usuario con el mismo nombre no reaprovecha tokens viejos. Duración por defecto: 8 h (antes 12 h).
+- **Secreto JWT obligatorio**: sin `GENIEACS_API_JWT_SECRET` de 32+ caracteres (o con el `CAMBIAME` de ejemplo) la API no arranca.
+- **Límite de intentos de login** en la propia API: 5 fallos/min por IP y 20/hora por usuario → `429` con `Retry-After`. Mismo tiempo de respuesta exista o no el usuario.
+- **Claves de 12+ caracteres** para usuarios nuevos y cambios de clave (API, panel, `manage.py`, instalador). Las claves existentes siguen sirviendo para entrar.
+- **Anti-SSRF**: "cargar firmware por URL" solo acepta destinos públicos (o `FIRMWARE_ALLOWED_NETWORKS`) y revalida cada redirección; la URL del NBI (Ajustes y prueba) solo puede apuntar a `ALLOWED_NBI_NETWORKS`. Se valida cada IP resuelta, incluidas IPv4 mapeadas en IPv6.
+- **Un ISP solo envía firmware**: no ve ni puede enviar archivos de configuración de proveedor (tipo 3).
+- **Firmware con límite de tamaño** (`MAX_UPLOAD_MB`, 512) procesado por bloques, sin cargarlo entero en memoria (tampoco en el middleware de auditoría), y con **SHA256** en la respuesta.
+- **Dependencias sin CVEs conocidos**: FastAPI 0.141 / Starlette 1.6, python-multipart 0.0.32, uvicorn 0.53, pydantic 2.13. `python-jose` (y su dependencia `ecdsa`, con vulnerabilidades sin arreglo) se sustituye por **PyJWT**. `pip-audit` pasaba de 33 vulnerabilidades a 0.
+- Cabeceras `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` en todas las respuestas.
+
+### Despliegue
+- La API escucha **solo en `127.0.0.1:8080`**; el instalador publica el panel por **HTTPS con Caddy** (Let's Encrypt con dominio o certificado propio para la IP), abre 443 en UFW y **cierra el 8080**.
+- Servicio systemd endurecido (`ProtectSystem=full`, `NoNewPrivileges`, `PrivateTmp`, `UMask=0077`, `RestrictAddressFamilies`…) y `--proxy-headers` para registrar la IP real.
+- **Respaldo de la BD**: copia consistente antes de cada actualización (`/root/backups`) y diaria con `genieacs-api-backup.timer` (14 copias, `manage.py backup-db`). BD y `.env` con permisos `600`.
+- `install.sh update` no cambia la exposición de una instalación antigua en `0.0.0.0` (avisa de usar `install`), y regenera el secreto JWT si era débil.
+
+### Cambiado
+- **Auto-restauración sin bucles ni acumulación de tareas**: no reintenta hasta que el equipo haya reportado después del intento anterior; tras 3 intentos sin que el equipo conserve los valores, se pausa 6 h y guarda el motivo (visible en la pestaña Respaldo). Los errores se registran en el journal en vez de ignorarse.
+- **Auditoría** con IP de origen, User-Agent y `request_id` (cabecera `X-Request-ID`); registra también los logins correctos, fallidos y bloqueados.
+- `PUT /auth/me/password` devuelve un token nuevo (el panel sigue en sesión tras cambiar la clave).
+- El panel muestra los errores de validación de la API en texto legible.
+- Arranque con `lifespan` (Starlette 1.x ya no tiene `on_event`).
+
+### Añadido
+- Pruebas de comportamiento en `tests/` (sin red ni ACS real) y CI de GitHub Actions: pyflakes, pytest en Python 3.10/3.11/3.13, `pip-audit` (también semanal) y `shellcheck` del instalador. Dependabot para pip y Actions.
+
 ## [1.3.0] - 2026-08-23
 
 ### Añadido

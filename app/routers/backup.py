@@ -10,16 +10,44 @@ al cwmp a preconditions fragiles.
 """
 import asyncio
 import json
+import logging
+import re
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from .. import db
+from ..config import get_settings
 from ..deps import authorized_device
 from ..genieacs import genie
 from ..parammap import CONFIG_KEYS, pick_map, resolve, writeonly_paths
 
+log = logging.getLogger("genieacs_api.backup")
+
 router = APIRouter(prefix="/devices/{device_id}", tags=["backup"])
+
+# rutas cuyo valor es una credencial: nunca se devuelven por la API
+_SECRET_RE = re.compile(r"(password|passphrase|presharedkey|wepkey|secret)", re.IGNORECASE)
+MASK = "********"
+
+
+def is_secret_path(path: str) -> bool:
+    return bool(_SECRET_RE.search(path))
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _parse_ts(v) -> datetime | None:
+    if not v:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
 class AutoRestoreIn(BaseModel):
@@ -36,7 +64,8 @@ def merge_device_config(device_id: str, pairs: list) -> None:
         return
     try:
         cfg = json.loads(row["config"]) if row.get("config") else {}
-    except Exception:
+    except ValueError:
+        log.exception("respaldo corrupto de %s; se reescribe", device_id)
         cfg = {}
     for p in pairs:
         if not p or p[1] is None:
@@ -80,7 +109,8 @@ async def _snapshot(device_id: str, pmap: dict) -> dict:
         if prev and prev.get("config"):
             try:
                 prev_cfg = json.loads(prev["config"])
-            except Exception:
+            except ValueError:
+                log.exception("respaldo previo corrupto de %s", device_id)
                 prev_cfg = {}
             for p in wo:
                 v = prev_cfg.get(p)
@@ -101,8 +131,9 @@ async def make_backup(device_id: str, dev=Depends(authorized_device)):
     paths = [p for p, _ in _config_paths(pmap)]
     try:
         await genie.get_parameter_values(device_id, paths)
-    except Exception:
-        pass
+    except Exception as e:
+        # sin lectura fresca se fotografia lo que tenga el ACS en cache
+        log.warning("backup %s: no se pudo pedir valores frescos: %s", device_id, e)
     await asyncio.sleep(1.5)
     cfg = await _snapshot(device_id, pmap)
     db.save_device_config(device_id, json.dumps(cfg))
@@ -115,9 +146,13 @@ async def get_backup(device_id: str, dev=Depends(authorized_device)):
     if not row or not row.get("config"):
         return {"exists": False, "autorestore": bool(row and row.get("autorestore"))}
     cfg = json.loads(row["config"])
+    # las claves (WiFi/PPPoE/admin) se guardan para restaurar, pero no se devuelven
     return {"exists": True, "autorestore": bool(row.get("autorestore")),
             "updated_at": row.get("updated_at"),
-            "params": {p: v[0] for p, v in cfg.items()}}
+            "suspended_until": row.get("suspended_until"),
+            "last_error": row.get("last_error"),
+            "params": {p: (MASK if is_secret_path(p) and v[0] not in (None, "") else v[0])
+                       for p, v in cfg.items()}}
 
 
 @router.post("/restore")
@@ -147,28 +182,63 @@ async def toggle_autorestore(device_id: str, body: AutoRestoreIn, dev=Depends(au
 
 
 # ---- bucle de enforcement (auto-restauracion) ---------------------------
+# Protecciones:
+# - Solo se reintenta si el equipo reporto (_lastInform) DESPUES del ultimo
+#   intento: si esta apagado, la tarea anterior sigue pendiente en el ACS y
+#   encolar otra cada 10 min solo acumula tareas.
+# - Si el drift persiste tras N intentos (el CPE rechaza o revierte el valor),
+#   se suspende unas horas y se registra el motivo, en vez de insistir sin fin.
+async def enforce_device(row: dict, now: datetime | None = None) -> str:
+    """Revisa un equipo. Devuelve: skipped | ok | applied | suspended | waiting."""
+    s = get_settings()
+    now = now or _utcnow()
+    dev_id = row["device_id"]
+    susp = _parse_ts(row.get("suspended_until"))
+    if susp and now < susp:
+        return "skipped"
+    desired = json.loads(row["config"])
+    doc = await genie.get_device(dev_id, list(desired.keys()) + ["_lastInform"])
+    if not doc:
+        return "skipped"
+    last_attempt = _parse_ts(row.get("last_attempt"))
+    last_inform = _parse_ts(doc.get("_lastInform"))
+    if last_attempt and (last_inform is None or last_inform <= last_attempt):
+        return "waiting"
+    drift = []
+    for path, (val, xsd) in desired.items():
+        cur = _read_path(doc, path)
+        if cur is None:
+            continue
+        if str(cur) != str(val):
+            drift.append([path, val] + ([xsd] if xsd else []))
+    attempts = row.get("attempts") or 0
+    if not drift:
+        if attempts or row.get("suspended_until") or last_attempt:
+            db.set_autorestore_state(dev_id, 0, None, None, None)
+        return "ok"
+    if attempts >= s.autorestore_max_attempts:
+        until = now + timedelta(hours=s.autorestore_suspend_hours)
+        paths = ", ".join(d[0] for d in drift[:5])
+        msg = f"El equipo no conserva {len(drift)} parametro(s) tras {attempts} intentos: {paths}"
+        log.warning("auto-restauracion de %s suspendida hasta %s: %s", dev_id, until.isoformat(), msg)
+        db.set_autorestore_state(dev_id, 0, None, until.isoformat(), msg)
+        return "suspended"
+    await genie.set_parameter_values(dev_id, drift, connection_request=False)
+    db.set_autorestore_state(dev_id, attempts + 1, now.isoformat(), None, None)
+    return "applied"
+
+
 async def enforce_once() -> int:
     """Revisa los equipos con auto-restauracion y reaplica lo que difiera."""
     fixed = 0
     for row in db.list_autorestore():
-        dev_id = row["device_id"]
         try:
-            desired = json.loads(row["config"])
-            doc = await genie.get_device(dev_id, list(desired.keys()))
-            if not doc:
-                continue
-            drift = []
-            for path, (val, xsd) in desired.items():
-                cur = _read_path(doc, path)
-                if cur is None:
-                    continue
-                if str(cur) != str(val):
-                    drift.append([path, val] + ([xsd] if xsd else []))
-            if drift:
-                await genie.set_parameter_values(dev_id, drift, connection_request=False)
+            if await enforce_device(row) == "applied":
                 fixed += 1
-        except Exception:
-            continue
+        except Exception as e:
+            log.exception("auto-restauracion de %s fallo", row["device_id"])
+            db.set_autorestore_state(row["device_id"], row.get("attempts") or 0, row.get("last_attempt"),
+                                     row.get("suspended_until"), f"{type(e).__name__}: {e}"[:300])
     return fixed
 
 
@@ -176,6 +246,8 @@ async def enforce_loop(interval: int = 600):
     while True:
         await asyncio.sleep(interval)
         try:
-            await enforce_once()
+            n = await enforce_once()
+            if n:
+                log.info("auto-restauracion: config reaplicada en %d equipo(s)", n)
         except Exception:
-            pass
+            log.exception("bucle de auto-restauracion fallo")
