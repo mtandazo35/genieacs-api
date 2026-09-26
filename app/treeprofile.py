@@ -302,20 +302,28 @@ def derived_params(doc: dict) -> dict:
     return out
 
 
-def effective_params(pmap: dict, doc: dict) -> dict:
-    """Rutas efectivas por concepto: manda el mapa escrito a mano, y solo se usa
-    la deduccion donde ese mapa apunta a algo que este equipo NO tiene.
+def effective_params(pmap: dict, doc: dict, overrides: dict | None = None) -> dict:
+    """Rutas efectivas por concepto, por orden de prioridad:
+
+    1. la correccion manual guardada para ese modelo (si la hay),
+    2. el mapa escrito a mano, cuando apunta a algo que este equipo SI tiene,
+    3. la deduccion del arbol,
+    4. el mapa, aunque el equipo no lo tenga (ultimo recurso, compatibilidad).
 
     Asi ningun equipo que hoy funciona cambia de comportamiento, y los que salian
-    en blanco (instancias distintas a las del modelo de referencia) se rellenan."""
+    en blanco (porque numeran las instancias distinto) se rellenan."""
     from .parammap import resolve
 
     presentes = {p for p, _v, _w in flatten(doc)}
     derivadas = derived_params(doc)
+    overrides = overrides or {}
     out = {}
-    for key in set(pmap["params"]) | set(derivadas):
+    for key in set(pmap["params"]) | set(derivadas) | set(overrides):
         mapeada = resolve(pmap, key)
-        if mapeada and mapeada[0] in presentes:
+        tipo = (mapeada or derivadas.get(key) or (None, S))[1]
+        if key in overrides:
+            out[key] = (overrides[key], tipo)
+        elif mapeada and mapeada[0] in presentes:
             out[key] = mapeada
         elif key in derivadas:
             out[key] = derivadas[key]

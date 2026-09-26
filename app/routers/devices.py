@@ -10,7 +10,8 @@ from ..bulk import resolve_targets
 from ..deps import CurrentUser, authorized_device, current_user, tenant_query
 from ..genieacs import genie
 from ..parammap import pick_map, resolve
-from ..treeprofile import coverage, derive, effective_params
+from .. import catalog
+from ..treeprofile import coverage, effective_params
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
@@ -345,15 +346,18 @@ async def device_status(device_id: str, dev=Depends(authorized_device)):
               # y no es culpa del equipo, es que falta el GetParameterNames
               "tree": coverage(full),
               # instancias deducidas del arbol (que interfaz es la WAN, que radio
-              # es cada banda...) con la evidencia de por que se eligieron
-              "profile": derive(full),
+              # es cada banda...) con la evidencia de por que se eligieron; se
+              # guardan en el catalogo por modelo+firmware para los que vengan
+              "profile": None,
               "manufacturer": did.get("_Manufacturer"),
               "model": model_name,
               "serial": did.get("_SerialNumber"),
               "name": meta.get("name"), "customer": meta.get("customer"), "notes": meta.get("notes")}
     # el mapa escrito a mano manda; la deduccion solo rellena lo que ese mapa
     # apunta a instancias que ESTE equipo no tiene (ver treeprofile.effective_params)
-    eff = effective_params(pmap, full)
+    model_key, perfil = catalog.recordar(full)
+    result["profile"] = {**perfil, "key": model_key}
+    eff = effective_params(pmap, full, catalog.overrides(model_key))
     for k in _STATUS_KEYS:
         r = eff.get(k) or resolve(pmap, k)
         if r:

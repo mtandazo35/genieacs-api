@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from . import db
 from .config import get_settings, jwt_secret_problem
 from .db import init_db
-from .routers import auth, backup, config, devices, firmware, settings, system
+from .routers import auth, backup, config, devices, firmware, profiles, settings, system
 from .security import decode_token
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -56,7 +56,8 @@ app = FastAPI(
 )
 
 
-_AUDIT_PREFIXES = ("/devices", "/firmware", "/settings", "/auth/users", "/auth/me/password")
+_AUDIT_PREFIXES = ("/devices", "/firmware", "/settings", "/profiles",
+                    "/auth/users", "/auth/me/password")
 _AUDIT_SKIP = ("read", "refresh")   # solo lectura: no ensucian el historial
 
 
@@ -116,6 +117,7 @@ def _audit_detail(method, parts, b):
         if len(parts) > 3 and parts[3] == "active": return f"{'Activo' if b.get('active') else 'Desactivo'} usuario {parts[2]}"
     if parts[0] == "auth" and "me" in parts and "password" in parts: return "Cambio su propia contrasena"
     if parts[0] == "settings": return "Cambio la conexion al ACS"
+    if parts[0] == "profiles": return f"Corrigio la ruta de '{b.get('concept', '')}' en un perfil de modelo"
     return f"{method} {seg or '/'.join(parts[:2])}"
 
 
@@ -192,6 +194,7 @@ app.include_router(system.router)
 app.include_router(firmware.router)
 app.include_router(backup.router)
 app.include_router(settings.router)
+app.include_router(profiles.router)
 
 # Front-end para usuario final (SPA vanilla). Se monta al final para que las
 # rutas de la API y /docs tengan precedencia; el resto sirve la app web.

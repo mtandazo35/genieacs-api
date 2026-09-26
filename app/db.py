@@ -37,6 +37,18 @@ CREATE TABLE IF NOT EXISTS device_meta (
     notes     TEXT,
     updated_at TEXT
 );
+CREATE TABLE IF NOT EXISTS model_profile (
+    key          TEXT PRIMARY KEY,           -- fabricante|clase|modelo|firmware
+    manufacturer TEXT,
+    product_class TEXT,
+    model        TEXT,
+    firmware     TEXT,
+    profile      TEXT,                       -- JSON: instancias deducidas + evidencia
+    overrides    TEXT,                       -- JSON: concepto -> path corregido a mano
+    devices      INTEGER NOT NULL DEFAULT 0, -- equipos vistos con este perfil
+    created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at   TEXT
+);
 CREATE TABLE IF NOT EXISTS audit_log (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
     ts        TEXT NOT NULL DEFAULT (datetime('now')),
@@ -222,6 +234,47 @@ def list_audit(device_id=None, limit=300) -> list[dict]:
         else:
             rows = c.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
         return [dict(r) for r in rows]
+
+
+# ---- catalogo de perfiles por modelo+firmware ----
+def get_model_profile(key: str) -> dict | None:
+    with connect() as c:
+        row = c.execute("SELECT * FROM model_profile WHERE key=?", (key,)).fetchone()
+        return dict(row) if row else None
+
+
+def upsert_model_profile(key: str, manufacturer, product_class, model, firmware,
+                         profile_json: str, device_seen: str | None = None) -> None:
+    """Guarda el perfil deducido de un modelo. No pisa las correcciones manuales.
+
+    `devices` cuenta equipos distintos vistos con este perfil; para eso se guarda
+    la lista de ids vistos dentro del propio JSON del perfil, no aqui."""
+    with connect() as c:
+        c.execute(
+            "INSERT INTO model_profile (key, manufacturer, product_class, model, firmware, "
+            "profile, devices, updated_at) VALUES (?,?,?,?,?,?,1,datetime('now')) "
+            "ON CONFLICT(key) DO UPDATE SET profile=excluded.profile, "
+            "manufacturer=excluded.manufacturer, product_class=excluded.product_class, "
+            "model=excluded.model, firmware=excluded.firmware, updated_at=datetime('now')",
+            (key, manufacturer, product_class, model, firmware, profile_json),
+        )
+
+
+def set_model_devices(key: str, n: int) -> None:
+    with connect() as c:
+        c.execute("UPDATE model_profile SET devices=? WHERE key=?", (n, key))
+
+
+def set_model_overrides(key: str, overrides_json: str | None) -> None:
+    with connect() as c:
+        c.execute("UPDATE model_profile SET overrides=?, updated_at=datetime('now') WHERE key=?",
+                  (overrides_json, key))
+
+
+def list_model_profiles() -> list[dict]:
+    with connect() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT * FROM model_profile ORDER BY manufacturer, model, firmware").fetchall()]
 
 
 # ---- settings (clave/valor) ----
