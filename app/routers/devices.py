@@ -10,6 +10,7 @@ from ..bulk import resolve_targets
 from ..deps import CurrentUser, authorized_device, current_user, tenant_query
 from ..genieacs import genie
 from ..parammap import pick_map, resolve
+from ..treeprofile import coverage
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
@@ -340,6 +341,9 @@ async def device_status(device_id: str, dev=Depends(authorized_device)):
                   or did.get("_ProductClass"))
     result = {"id": device_id, "tags": full.get("_tags", []),
               "last_inform": full.get("_lastInform"),
+              # cuanto arbol tiene el ACS: si esta incompleto, la ficha sale a medias
+              # y no es culpa del equipo, es que falta el GetParameterNames
+              "tree": coverage(full),
               "manufacturer": did.get("_Manufacturer"),
               "model": model_name,
               "serial": did.get("_SerialNumber"),

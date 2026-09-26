@@ -189,6 +189,11 @@ function renderStatus(st) {
   $("#label-customer").value = st.customer || "";
   $("#label-notes").value = st.notes || "";
   $("#dev-tags").innerHTML = visibleTags(st.tags).map(t => `<span class="tag">${esc(t)}</span>`).join("");
+  // el ACS solo guarda lo que el equipo reportó: si falta árbol, la ficha sale a
+  // medias y no es un fallo del equipo, es que falta pedirle los parámetros
+  const tree = st.tree || {};
+  $("#dev-tree-msg").textContent = tree.hint || "";
+  $("#dev-tree").classList.toggle("hidden", !tree.hint);
   const dhcp = (st.dhcp_min || st.dhcp_max) ? `${st.dhcp_min || "?"} – ${st.dhcp_max || "?"}` : null;
   const sections = [
     ["Dispositivo", [
@@ -404,6 +409,17 @@ async function wanRefreshFromDevice(silent) {
     if (!silent) toast("✓ WAN actualizada", "ok");
   } catch (e) { if (!silent) toast(e.message, "err"); }
 }
+$("#dev-tree-refresh").addEventListener("click", async () => {
+  const b = $("#dev-tree-refresh"); b.disabled = true; const prev = b.textContent;
+  b.textContent = "Pidiendo el árbol…";
+  try {
+    const r = await api(`/devices/${enc(S.current)}/refresh`, { method: "POST" });
+    toast(r.applied ? "✓ Árbol pedido al equipo; vuelve a abrir la ficha en unos segundos"
+                    : "Petición encolada: se aplicará en el próximo reporte del equipo", "ok");
+  } catch (e) { toast(e.message, "err"); }
+  finally { b.disabled = false; b.textContent = prev; }
+});
+
 $("#wan-refresh").addEventListener("click", async () => {
   const b = $("#wan-refresh"); b.disabled = true; const p = b.textContent; b.textContent = "Actualizando…";
   await wanRefreshFromDevice(false);

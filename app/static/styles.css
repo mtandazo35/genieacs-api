@@ -52,6 +52,10 @@ main{max-width:1100px;margin:0 auto;padding:1.5rem}
 .dev-label{margin:-.5rem 0 1.2rem;display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
 .dev-label form{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
 .dev-label form input{margin:0;width:auto;min-width:180px}
+/* aviso de arbol incompleto en la ficha del equipo */
+.tree-warn{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin:-.5rem 0 1.2rem;
+  padding:.55rem .8rem;background:var(--bg2);border:1px solid var(--line);border-radius:8px}
+
 .wan-list{margin-bottom:1.2rem}
 .wan-head{font-size:.8rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:.5rem}
 .wan-row{padding:.45rem .7rem;border:1px solid var(--line);border-radius:8px;margin-bottom:.4rem;font-size:.85rem;font-family:ui-monospace,monospace}
