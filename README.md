@@ -136,6 +136,15 @@ El respaldo **se fusiona con cada cambio** aplicado (nunca queda viejo). Un bucl
 | DELETE | `/firmware/{name}` | borrar |
 | POST | `/firmware/push` | envío masivo `{file_name, all\|tag\|model\|device_ids}` (encola; detecta el tipo) |
 
+### Perfiles de modelo (admin)
+Cada vez que se abre la ficha de un equipo, el panel guarda el perfil deducido bajo la clave `fabricante|clase|modelo|firmware`, así el siguiente equipo del mismo modelo ya sale completo. Si una deducción no acierta en un modelo concreto, se corrige la ruta de ese concepto **sin tocar código**, y esa corrección manda sobre el mapa y sobre lo deducido.
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/profiles` | perfiles aprendidos, con la evidencia de cada deducción y cuántos equipos de la flota usan cada uno |
+| GET | `/profiles/{key}` | un perfil concreto |
+| PUT | `/profiles/{key}/override` | `{concept, path}` corrige la ruta de un concepto (`path: null` la borra) |
+
 ### Conexión al ACS (admin)
 | Método | Ruta | Descripción |
 |---|---|---|
