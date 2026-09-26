@@ -138,6 +138,19 @@ El respaldo **se fusiona con cada cambio** aplicado (nunca queda viejo). Un bucl
 | DELETE | `/firmware/{name}` | borrar |
 | POST | `/firmware/push` | envío masivo `{file_name, all\|tag\|model\|device_ids}` (encola; detecta el tipo) |
 
+### Equipos nuevos / descubrimiento (admin)
+Un CPE recién vinculado llega al ACS **sin tag**, y como la multi-tenencia se apoya en los tags, ningún usuario ISP lo ve. El descubrimiento lo detecta y propone a qué ISP pertenece según la IP desde la que informa (la del `ConnectionRequestURL`), cruzada con una tabla de rangos.
+
+Arranca en **modo sugerencia**: propone y no toca nada. Cuando compruebes que acierta, lo pasas a automático. Gana el rango más específico, y si dos ISP reclaman el mismo, no asigna: un tag mal puesto le daría a un ISP acceso a equipos de otro.
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/discovery` | equipos sin tag, con el ISP sugerido y el motivo |
+| GET/POST | `/discovery/rules` | rangos `CIDR → isp_tag` |
+| DELETE | `/discovery/rules/{id}` | borrar un rango |
+| POST | `/discovery/assign` | `{device_id, isp_tag}` asignar (confirmar una sugerencia o hacerlo a mano) |
+| PUT | `/discovery/mode` | `{auto, interval?}` cambiar entre sugerir y asignar sola |
+
 ### Perfiles de modelo (admin)
 Cada vez que se abre la ficha de un equipo, el panel guarda el perfil deducido bajo la clave `fabricante|clase|modelo|firmware`, así el siguiente equipo del mismo modelo ya sale completo. Si una deducción no acierta en un modelo concreto, se corrige la ruta de ese concepto **sin tocar código**, y esa corrección manda sobre el mapa y sobre lo deducido.
 

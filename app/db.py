@@ -37,6 +37,13 @@ CREATE TABLE IF NOT EXISTS device_meta (
     notes     TEXT,
     updated_at TEXT
 );
+CREATE TABLE IF NOT EXISTS owner_rule (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    cidr       TEXT NOT NULL,      -- rango de IPs de los CPE de ese ISP
+    isp_tag    TEXT NOT NULL,      -- tag que se le pone al equipo
+    comment    TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 CREATE TABLE IF NOT EXISTS model_profile (
     key          TEXT PRIMARY KEY,           -- fabricante|clase|modelo|firmware
     manufacturer TEXT,
@@ -234,6 +241,30 @@ def list_audit(device_id=None, limit=300) -> list[dict]:
         else:
             rows = c.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
         return [dict(r) for r in rows]
+
+
+# ---- rangos de IP por ISP (descubrimiento de equipos nuevos) ----
+def list_owner_rules() -> list[dict]:
+    with connect() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT * FROM owner_rule ORDER BY isp_tag, cidr").fetchall()]
+
+
+def get_owner_rule(rule_id: int) -> dict | None:
+    with connect() as c:
+        row = c.execute("SELECT * FROM owner_rule WHERE id=?", (rule_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def add_owner_rule(cidr: str, isp_tag: str, comment: str | None = None) -> None:
+    with connect() as c:
+        c.execute("INSERT INTO owner_rule (cidr, isp_tag, comment) VALUES (?,?,?)",
+                  (cidr, isp_tag, comment))
+
+
+def delete_owner_rule(rule_id: int) -> None:
+    with connect() as c:
+        c.execute("DELETE FROM owner_rule WHERE id=?", (rule_id,))
 
 
 # ---- catalogo de perfiles por modelo+firmware ----
