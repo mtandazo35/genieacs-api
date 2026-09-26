@@ -77,7 +77,7 @@ El registro guarda **qué** se hizo (frase legible: "Acceso remoto ACTIVADO", "c
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET  | `/devices` | lista (id, name, customer, tags, modelo, firmware, último inform), filtrada por tenencia |
-| GET  | `/devices/{id}/status` | ficha de estado (dispositivo, WAN activa, LAN, WiFi con clientes, PPPoE con estado, MAC, name/customer) |
+| GET  | `/devices/{id}/status` | ficha de estado (dispositivo, WAN activa, LAN, WiFi con clientes, PPPoE con estado, MAC, name/customer) + `tree`: cuántos parámetros tiene el ACS de ese equipo y si falta refrescar |
 | POST | `/devices/{id}/read` | pide al CPE los parámetros de estado (getParameterValues) |
 | POST | `/devices/{id}/refresh?object=` | GetParameterNames de la raíz (o del `object` dado) |
 | POST | `/devices/read-bulk` | lectura masiva `{all\|tag\|model\|device_ids}` (respeta tenencia) |
@@ -161,6 +161,7 @@ curl -X PUT "$BASE/devices/$DEV/label" -H "$H" -H 'Content-Type: application/jso
 
 ## Conceptos importantes
 
+- **El ACS solo guarda lo que el equipo ya reportó.** En su primer inform un CPE manda unas decenas de parámetros; el árbol completo (cientos en TR-098, miles en TR-181) solo llega tras un `GetParameterNames`, que es el botón **Actualizar**. Por eso la ficha puede salir a medias en un equipo recién vinculado: no es que el modelo no lo soporte. El campo `tree` de `/status` lo mide y el panel lo avisa en la propia ficha.
 - **El ACS muestra el ÚLTIMO reporte del CPE (caché), no el estado en vivo.** Tras un cambio, puede seguir viéndose el valor viejo hasta el siguiente inform; por eso hay `/read`, `/refresh` y auto-refresco en el panel (piden datos frescos por connection request).
 - **Un CPE puede tener varias conexiones WAN a la vez** (WANIPConnection.1/.2 + WANPPPConnection.1). La API detecta y usa la **activa** (Connected); leer una instancia fija daba información falsa (DHCP vs Static vs PPPoE).
 - **Nombre/cliente ≠ tags de GenieACS** (ver sección Identificación).

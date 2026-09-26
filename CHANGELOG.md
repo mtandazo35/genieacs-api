@@ -2,6 +2,12 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
+## [No publicado]
+
+### Añadido
+- **Cobertura del árbol en la ficha del equipo** (etapa 1 del plan de perfiles derivados): `GET /devices/{id}/status` devuelve `tree` con cuántos parámetros tiene el ACS de ese equipo, cuáles son las señales que faltan (ruta por defecto y bandas WiFi) y un aviso accionable. El panel lo muestra bajo la cabecera con un botón **Actualizar árbol**. Medido en la flota el 2026-09-26: 6 de 8 equipos estaban sin refrescar (28-45 parámetros) y por eso su ficha salía incompleta; los refrescados tenían 285 y 4653.
+- Módulo `app/treeprofile.py` (funciones puras sobre el árbol del ACS, sin IO), base de las siguientes etapas: deducir WAN, LAN, radios y PPPoE del propio árbol en vez de mapas por marca.
+
 ## [1.4.0] - 2026-09-21
 
 Correcciones de la auditoría técnica de seguridad del 2026-09-21.
