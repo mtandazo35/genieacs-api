@@ -17,7 +17,9 @@ from fastapi.staticfiles import StaticFiles
 from . import db
 from .config import get_settings, jwt_secret_problem
 from .db import init_db
-from .routers import auth, backup, config, devices, firmware, profiles, settings, system
+from . import discovery as descubrimiento
+from .routers import (auth, backup, config, devices, discovery,
+                      firmware, profiles, settings, system)
 from .security import decode_token
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -41,10 +43,13 @@ async def lifespan(_app: FastAPI):
         # sin secreto fuerte cualquiera podria firmar tokens de admin
         raise RuntimeError(f"{problem}. Genera uno: python3 -c \"import secrets;print(secrets.token_hex(32))\"")
     init_db()
-    # bucle de auto-restauracion de config tras factory reset
-    task = asyncio.create_task(backup.enforce_loop())
+    # bucles de fondo: auto-restauracion tras factory reset y descubrimiento de
+    # equipos nuevos (que llegan sin tag y por eso ningun ISP los ve)
+    tareas = [asyncio.create_task(backup.enforce_loop()),
+              asyncio.create_task(descubrimiento.bucle())]
     yield
-    task.cancel()
+    for t in tareas:
+        t.cancel()
 
 
 app = FastAPI(
@@ -56,7 +61,7 @@ app = FastAPI(
 )
 
 
-_AUDIT_PREFIXES = ("/devices", "/firmware", "/settings", "/profiles",
+_AUDIT_PREFIXES = ("/devices", "/firmware", "/settings", "/profiles", "/discovery",
                     "/auth/users", "/auth/me/password")
 _AUDIT_SKIP = ("read", "refresh")   # solo lectura: no ensucian el historial
 
@@ -116,6 +121,14 @@ def _audit_detail(method, parts, b):
         if len(parts) > 3 and parts[3] == "password": return f"Reseteo clave de {parts[2]}"
         if len(parts) > 3 and parts[3] == "active": return f"{'Activo' if b.get('active') else 'Desactivo'} usuario {parts[2]}"
     if parts[0] == "auth" and "me" in parts and "password" in parts: return "Cambio su propia contrasena"
+    if parts[0] == "discovery":
+        if len(parts) > 1 and parts[1] == "assign":
+            return f"Asigno {b.get('device_id', '')} a {b.get('isp_tag', '')}"
+        if len(parts) > 1 and parts[1] == "rules":
+            return (f"Anadio el rango {b.get('cidr', '')} -> {b.get('isp_tag', '')}"
+                    if method == "POST" else "Borro un rango de descubrimiento")
+        if len(parts) > 1 and parts[1] == "mode":
+            return f"Descubrimiento en modo {'automatico' if b.get('auto') else 'sugerencia'}"
     if parts[0] == "settings": return "Cambio la conexion al ACS"
     if parts[0] == "profiles": return f"Corrigio la ruta de '{b.get('concept', '')}' en un perfil de modelo"
     return f"{method} {seg or '/'.join(parts[:2])}"
@@ -195,6 +208,7 @@ app.include_router(firmware.router)
 app.include_router(backup.router)
 app.include_router(settings.router)
 app.include_router(profiles.router)
+app.include_router(discovery.router)
 
 # Front-end para usuario final (SPA vanilla). Se monta al final para que las
 # rutas de la API y /docs tengan precedencia; el resto sirve la app web.
