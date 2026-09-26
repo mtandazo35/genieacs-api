@@ -29,6 +29,7 @@
       <a href="#" data-nav="devices" class="active">Equipos</a>
       <a href="#" data-nav="updates" id="nav-updates" class="hidden">Actualizaciones</a>
       <a href="#" data-nav="users" id="nav-users" class="hidden">Usuarios</a>
+      <a href="#" data-nav="prov" id="nav-prov" class="hidden">Aprovisionamiento</a>
       <a href="#" data-nav="settings" id="nav-settings" class="hidden">Ajustes</a>
       <a href="#" data-nav="audit" id="nav-audit" class="hidden">Actividad</a>
       <a href="#" data-nav="account">Mi cuenta</a>
@@ -416,6 +417,87 @@
     </section>
 
     <!-- Ajustes: conexión al ACS (solo admin) -->
+    <!-- Aprovisionamiento: equipos nuevos, perfiles de modelo y DHCP -->
+    <section id="prov-page" class="hidden">
+      <div class="page-head"><h2>Aprovisionamiento</h2></div>
+      <div class="subtabs">
+        <button class="subtab active" data-psub="nuevos">Equipos nuevos</button>
+        <button class="subtab" data-psub="perfiles">Perfiles de modelo</button>
+        <button class="subtab" data-psub="dhcp">DHCP / Option 43</button>
+      </div>
+
+      <!-- ---- equipos nuevos ---- -->
+      <div data-ppanel="nuevos">
+        <div class="card-form">
+          <h3>Modo</h3>
+          <p class="muted small" id="disc-modo-txt"></p>
+          <div class="row">
+            <label>Asignar automáticamente
+              <input type="checkbox" id="disc-auto">
+            </label>
+            <label>Cada (segundos)<input id="disc-interval" type="number" min="30" max="3600"></label>
+          </div>
+          <button type="button" id="disc-save-mode">Guardar modo</button>
+        </div>
+
+        <form id="disc-rule-form" class="card-form">
+          <h3>Rangos por ISP</h3>
+          <p class="muted small">La IP desde la que informa el equipo decide de quién es. Gana el rango más específico; si dos ISP reclaman el mismo, no se asigna.</p>
+          <div class="row">
+            <label>Rango (CIDR)<input id="disc-cidr" placeholder="100.125.125.0/24" required></label>
+            <label>Tag del ISP<input id="disc-tag" placeholder="ISP-A" required></label>
+          </div>
+          <label>Comentario<input id="disc-comment" placeholder="opcional"></label>
+          <button type="submit">Añadir rango</button>
+        </form>
+        <table class="tbl" id="disc-rules"><tbody></tbody></table>
+
+        <div class="page-head" style="margin-top:1.5rem">
+          <h3>Sin asignar</h3><button id="disc-refresh" class="ghost small">↻ Actualizar</button>
+        </div>
+        <table class="tbl" id="disc-list"><tbody></tbody></table>
+      </div>
+
+      <!-- ---- perfiles de modelo ---- -->
+      <div data-ppanel="perfiles" class="hidden">
+        <p class="muted small">Qué instancia es la WAN, la LAN y cada radio en cada modelo, deducido de su árbol. Se aprende al abrir la ficha de un equipo.</p>
+        <div class="page-head"><h3>Catálogo</h3><button id="prof-refresh" class="ghost small">↻ Actualizar</button></div>
+        <div id="prof-list"></div>
+      </div>
+
+      <!-- ---- DHCP / Option 43 ---- -->
+      <div data-ppanel="dhcp" class="hidden">
+        <form id="dhcp-form" class="card-form">
+          <h3>Script para MikroTik</h3>
+          <p class="muted small">Genera el script que entrega la URL del ACS por DHCP. El panel no se conecta al router: lo pegas tú, y el script trae su bloque para deshacerlo.</p>
+          <label>URL del ACS<input id="dhcp-acs" placeholder="http://10.99.99.5:7547/"></label>
+          <div class="row">
+            <label>RouterOS
+              <select id="dhcp-ros"><option value="7">7</option><option value="6">6</option></select>
+            </label>
+            <label>Codificación
+              <select id="dhcp-enc">
+                <option value="tlv">TLV (estándar TR-069)</option>
+                <option value="plana">URL plana (equipos que no entienden TLV)</option>
+                <option value="ambas">Ambas por vendor-class (solo v7)</option>
+              </select>
+            </label>
+            <label>Incluir opción 125<input type="checkbox" id="dhcp-125" checked></label>
+          </div>
+          <h4>Redes donde entregarlo</h4>
+          <div id="dhcp-redes"></div>
+          <button type="button" id="dhcp-add-red" class="ghost small">+ Añadir red</button>
+          <button type="submit">Generar script</button>
+        </form>
+        <div id="dhcp-avisos"></div>
+        <pre id="dhcp-script" class="adv-list hidden" style="white-space:pre-wrap"></pre>
+        <div id="dhcp-acciones" class="hidden">
+          <button type="button" id="dhcp-copy" class="ghost small">Copiar</button>
+          <button type="button" id="dhcp-download" class="ghost small">Descargar .rsc</button>
+        </div>
+      </div>
+    </section>
+
     <section id="settings-page" class="hidden">
       <div class="page-head"><h2>Conexión al ACS</h2></div>
       <form id="settings-form" class="card-form">

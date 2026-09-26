@@ -71,6 +71,7 @@ function navigate(nav) {
   $("#device-page").classList.add("hidden");
   $("#users-page").classList.toggle("hidden", nav !== "users");
   $("#settings-page").classList.toggle("hidden", nav !== "settings");
+  $("#prov-page").classList.toggle("hidden", nav !== "prov");
   $("#updates-page").classList.toggle("hidden", nav !== "updates");
   $("#account-page").classList.toggle("hidden", nav !== "account");
   $("#audit-page").classList.toggle("hidden", nav !== "audit");
@@ -78,6 +79,7 @@ function navigate(nav) {
   if (nav === "devices") loadDevices();
   if (nav === "users") loadUsers();
   if (nav === "settings") loadSettings();
+  if (nav === "prov") loadProv();
   if (nav === "updates") loadUpdates();
   if (nav === "account") loadAccount();
   if (nav === "audit") loadAudit();
@@ -659,14 +661,6 @@ const actions = {
     clearInputs("wan-ip", "wan-mask", "wan-gw", "wan-dns", "wan-mtu");
     wanRefreshFromDevice(true);   // refrescar la WAN real para reflejar el cambio
   },
-  async pppoe() {
-    const body = { enable: $("#ppp-enable").checked };
-    if ($("#ppp-user").value.trim()) body.username = $("#ppp-user").value.trim();
-    if ($("#ppp-pass").value) body.password = $("#ppp-pass").value;
-    const r = await api(`/devices/${enc(S.current)}/pppoe`, { method: "PUT", body });
-    report(r); refreshAfterChange(r);
-    clearInputs("ppp-user", "ppp-pass");
-  },
   async access() {
     const body = {};
     body.remote_enable = $("#acc-remote").checked;
@@ -980,6 +974,194 @@ document.addEventListener("click", async (e) => {
 // ===== Utilidades de formato =====
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function escAttr(s) { return esc(s); }
+
+// ===== Aprovisionamiento (admin): equipos nuevos, perfiles y DHCP =====
+$$("[data-psub]").forEach(b => b.addEventListener("click", () => {
+  $$("[data-psub]").forEach(x => x.classList.toggle("active", x === b));
+  $$("[data-ppanel]").forEach(p => p.classList.toggle("hidden", p.dataset.ppanel !== b.dataset.psub));
+  if (b.dataset.psub === "perfiles") loadPerfiles();
+  if (b.dataset.psub === "dhcp") loadDhcpDefaults();
+}));
+
+function loadProv() { loadDescubrimiento(); }
+
+// ---- equipos nuevos ----
+async function loadDescubrimiento() {
+  try {
+    const [d, reglas] = await Promise.all([api("/discovery"), api("/discovery/rules")]);
+    $("#disc-auto").checked = d.modo === "automatico";
+    $("#disc-interval").value = d.intervalo;
+    $("#disc-modo-txt").textContent = d.modo === "automatico"
+      ? "Automático: los equipos que encajen en un rango reciben su tag solos."
+      : "Sugerencia: se propone el ISP pero no se toca ningún equipo.";
+    $("#disc-rules").querySelector("tbody").innerHTML = reglas.length
+      ? reglas.map(r => `<tr><td><code>${esc(r.cidr)}</code></td><td>${esc(r.isp_tag)}</td>
+          <td class="muted small">${esc(r.comment || "")}</td>
+          <td><button class="ghost small" data-rule="${r.id}">Borrar</button></td></tr>`).join("")
+      : `<tr><td class="muted">Sin rangos configurados: sin ellos no se puede sugerir nada.</td></tr>`;
+    const eq = d.equipos || [];
+    $("#disc-list").querySelector("tbody").innerHTML = eq.length
+      ? eq.map(e => `<tr>
+          <td>${esc(e.manufacturer || "")} ${esc(e.model || "")}<br><span class="muted small">${esc(e.id)}</span></td>
+          <td><code>${esc(e.ip || "?")}</code></td>
+          <td>${e.isp_tag ? `<b>${esc(e.isp_tag)}</b>` : `<span class="muted">sin asignar</span>`}
+              <br><span class="muted small">${esc(e.motivo || "")}</span></td>
+          <td>${e.isp_tag ? `<button class="ghost small" data-assign="${escAttr(e.id)}" data-tag="${escAttr(e.isp_tag)}">Asignar</button>` : ""}</td>
+        </tr>`).join("")
+      : `<tr><td class="muted">Todos los equipos tienen ISP asignado.</td></tr>`;
+  } catch (e) { toast(e.message, "err"); }
+}
+
+$("#disc-refresh").addEventListener("click", loadDescubrimiento);
+
+$("#disc-rule-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    await api("/discovery/rules", { method: "POST", body: {
+      cidr: $("#disc-cidr").value.trim(), isp_tag: $("#disc-tag").value.trim(),
+      comment: $("#disc-comment").value.trim() || null } });
+    $("#disc-rule-form").reset(); toast("✓ Rango añadido", "ok"); loadDescubrimiento();
+  } catch (err) { toast(err.message, "err"); }
+});
+
+$("#disc-rules").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-rule]"); if (!b) return;
+  try { await api(`/discovery/rules/${b.dataset.rule}`, { method: "DELETE" }); loadDescubrimiento(); }
+  catch (err) { toast(err.message, "err"); }
+});
+
+$("#disc-list").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-assign]"); if (!b) return;
+  b.disabled = true;
+  try {
+    await api("/discovery/assign", { method: "POST",
+      body: { device_id: b.dataset.assign, isp_tag: b.dataset.tag } });
+    toast("✓ Equipo asignado", "ok"); loadDescubrimiento();
+  } catch (err) { toast(err.message, "err"); b.disabled = false; }
+});
+
+$("#disc-save-mode").addEventListener("click", async () => {
+  try {
+    await api("/discovery/mode", { method: "PUT", body: {
+      auto: $("#disc-auto").checked, interval: Number($("#disc-interval").value) || null } });
+    toast("✓ Modo guardado", "ok"); loadDescubrimiento();
+  } catch (e) { toast(e.message, "err"); }
+});
+
+// ---- perfiles de modelo ----
+async function loadPerfiles() {
+  try {
+    const [perfiles, ia] = await Promise.all([api("/profiles"), api("/homologacion/estado")]);
+    $("#prof-list").innerHTML = perfiles.length ? perfiles.map(p => {
+      const pr = p.profile || {}, ev = pr.evidencia || {};
+      const filas = Object.entries(ev).filter(([k]) => k !== "wan_gateway_path")
+        .map(([k, v]) => `<tr><td>${esc(k)}</td><td class="muted small">${esc(v)}</td></tr>`).join("");
+      const over = Object.entries(p.overrides || {})
+        .map(([c, ruta]) => `<tr><td>${esc(c)}</td><td><code>${esc(ruta)}</code>
+            <button class="ghost small" data-unset="${escAttr(p.key)}" data-c="${escAttr(c)}">Quitar</button></td></tr>`).join("");
+      return `<div class="card-form">
+        <h3>${esc(p.manufacturer || "?")} ${esc(p.model || "?")}</h3>
+        <p class="muted small">Firmware ${esc(p.firmware || "?")} · ${p.devices ?? "?"} equipo(s) · actualizado ${fmtDate(p.updated_at)}</p>
+        <table class="tbl"><tbody>${filas || `<tr><td class="muted">Sin deducciones todavía (falta refrescar el árbol de algún equipo).</td></tr>`}</tbody></table>
+        ${over ? `<h4>Correcciones manuales</h4><table class="tbl"><tbody>${over}</tbody></table>` : ""}
+        ${ia.disponible ? `<button class="ghost small" data-ia="${escAttr(p.key)}">Proponer mapeo con IA</button>` : ""}
+      </div>`;
+    }).join("") : `<p class="muted">Aún no se ha aprendido ningún perfil: abre la ficha de un equipo.</p>`;
+  } catch (e) { toast(e.message, "err"); }
+}
+
+$("#prof-refresh").addEventListener("click", loadPerfiles);
+
+$("#prof-list").addEventListener("click", async (e) => {
+  const q = e.target.closest("[data-unset]");
+  if (q) {
+    try {
+      await api(`/profiles/${encodeURIComponent(q.dataset.unset)}/override`,
+        { method: "PUT", body: { concept: q.dataset.c, path: null } });
+      toast("Corrección quitada", "ok"); loadPerfiles();
+    } catch (err) { toast(err.message, "err"); }
+    return;
+  }
+  const ia = e.target.closest("[data-ia]");
+  if (ia) {
+    const dev = prompt("ID del equipo de ese modelo sobre el que proponer (cópialo de la lista de equipos):");
+    if (!dev) return;
+    ia.disabled = true; const prev = ia.textContent; ia.textContent = "Consultando…";
+    try {
+      const r = await api("/homologacion/proponer", { method: "POST", body: { device_id: dev } });
+      if (!r.sugerencias || !r.sugerencias.length) { toast(r.detail || "Sin sugerencias", "info"); return; }
+      for (const s of r.sugerencias) {
+        if (confirm(`¿Usar esta ruta para ${s.concept}?\\n\\n${s.path}\\n\\nValor actual: ${s.valor_actual}`)) {
+          await api("/homologacion/confirmar", { method: "POST",
+            body: { key: r.key, concept: s.concept, path: s.path } });
+        }
+      }
+      loadPerfiles();
+    } catch (err) { toast(err.message, "err"); }
+    finally { ia.disabled = false; ia.textContent = prev; }
+  }
+});
+
+// ---- DHCP / Option 43 ----
+function filaRed(v = {}) {
+  const d = document.createElement("div");
+  d.className = "row dhcp-red";
+  d.innerHTML = `<label>Red (CIDR)<input class="dr-cidr" placeholder="100.125.125.0/24" value="${escAttr(v.cidr || "")}"></label>
+    <label>Gateway<input class="dr-gw" placeholder="opcional"></label>
+    <label>Pool desde<input class="dr-from" placeholder="opcional"></label>
+    <label>Pool hasta<input class="dr-to" placeholder="opcional"></label>
+    <button type="button" class="ghost small dr-del">✕</button>`;
+  d.querySelector(".dr-del").addEventListener("click", () => d.remove());
+  return d;
+}
+
+async function loadDhcpDefaults() {
+  if ($("#dhcp-redes").children.length === 0) $("#dhcp-redes").appendChild(filaRed());
+  if ($("#dhcp-acs").value) return;
+  try { $("#dhcp-acs").value = (await api("/provisioning/dhcp/defaults")).acs_url; }
+  catch { /* el admin puede escribirla a mano */ }
+}
+
+$("#dhcp-add-red").addEventListener("click", () => $("#dhcp-redes").appendChild(filaRed()));
+
+function cuerpoDhcp() {
+  const redes = $$(".dhcp-red").map(r => ({
+    cidr: r.querySelector(".dr-cidr").value.trim(),
+    gateway: r.querySelector(".dr-gw").value.trim() || null,
+    pool_from: r.querySelector(".dr-from").value.trim() || null,
+    pool_to: r.querySelector(".dr-to").value.trim() || null,
+  })).filter(r => r.cidr);
+  return { acs_url: $("#dhcp-acs").value.trim() || null, networks: redes,
+           routeros: $("#dhcp-ros").value, encoding: $("#dhcp-enc").value,
+           include_125: $("#dhcp-125").checked };
+}
+
+$("#dhcp-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const body = cuerpoDhcp();
+  if (!body.networks.length) return toast("Indica al menos una red", "err");
+  try {
+    const r = await api("/provisioning/dhcp/script", { method: "POST", body });
+    $("#dhcp-script").textContent = r.script;
+    $("#dhcp-script").classList.remove("hidden");
+    $("#dhcp-acciones").classList.remove("hidden");
+    $("#dhcp-avisos").innerHTML = (r.avisos || [])
+      .map(a => `<p class="muted small">⚠ ${esc(a)}</p>`).join("");
+  } catch (err) { toast(err.message, "err"); $("#dhcp-script").classList.add("hidden"); }
+});
+
+$("#dhcp-copy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("#dhcp-script").textContent); toast("✓ Copiado", "ok"); }
+  catch { toast("El navegador no dejó copiar; selecciona el texto", "err"); }
+});
+
+$("#dhcp-download").addEventListener("click", () => {
+  const blob = new Blob([$("#dhcp-script").textContent], { type: "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "tr069-dhcp.rsc"; a.click();
+  URL.revokeObjectURL(a.href);
+});
+
 function fmtDate(iso) { if (!iso) return "-"; const d = new Date(iso); return isNaN(d) ? iso : d.toLocaleString(); }
 function isRecent(iso) { if (!iso) return false; return (Date.now() - new Date(iso).getTime()) < 15 * 60 * 1000; }
 function fmtUptime(s) { if (s == null) return "-"; s = +s; const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60); return `${d}d ${h}h ${m}m`; }
@@ -995,6 +1177,7 @@ async function boot() {
   } catch { S.role = S.role || "isp"; }
   $("#nav-users").classList.toggle("hidden", S.role !== "admin");
   $("#nav-settings").classList.toggle("hidden", S.role !== "admin");
+  $("#nav-prov").classList.toggle("hidden", S.role !== "admin");
   $("#nav-updates").classList.toggle("hidden", S.role !== "admin");
   $("#nav-audit").classList.toggle("hidden", S.role !== "admin");
   $("#who").textContent = S.isp ? `ISP: ${S.isp}` : (S.role === "admin" ? "Administrador" : "");
