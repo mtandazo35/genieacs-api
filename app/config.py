@@ -40,6 +40,13 @@ class Settings(BaseSettings):
     max_upload_mb: int = 512
     firmware_allowed_networks: str = ""
 
+    # Proveedor de IA para la homologacion asistida (opcional; sin clave, apagada).
+    # Groq y cualquier compatible con el API de OpenAI comparten cliente.
+    llm_provider: str = "groq"          # groq | openai | openrouter | local
+    llm_api_key: str = ""
+    llm_model: str = ""                 # vacio = el del proveedor
+    llm_base_url: str = ""              # vacio = el del proveedor
+
     # Auto-restauracion: intentos seguidos sin corregir el drift antes de suspender
     autorestore_max_attempts: int = 3
     autorestore_suspend_hours: int = 6

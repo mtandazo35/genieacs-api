@@ -138,6 +138,22 @@ El respaldo **se fusiona con cada cambio** aplicado (nunca queda viejo). Un bucl
 | DELETE | `/firmware/{name}` | borrar |
 | POST | `/firmware/push` | envío masivo `{file_name, all\|tag\|model\|device_ids}` (encola; detecta el tipo) |
 
+### Homologación asistida por IA (admin, opcional)
+Para los conceptos que las reglas deterministas no resuelven en un modelo concreto (normalmente parámetros propietarios), se le puede pedir una propuesta de mapeo a un modelo de lenguaje. **Queda apagada si no hay clave configurada.**
+
+Tres cosas la hacen segura:
+- Al modelo se le mandan **rutas y tipos, nunca valores**: no salen SSID, claves ni IPs de abonados.
+- Una ruta que el modelo se invente **se descarta**: solo se aceptan rutas que existen en el árbol de ese equipo.
+- **Nada se aplica solo**: la propuesta se muestra con el valor actual de cada ruta, y solo al confirmar se guarda como corrección del catálogo.
+
+Proveedor intercambiable en el `.env` (`LLM_PROVIDER`): **Groq** por defecto, y cualquier otro compatible con el API de OpenAI (OpenRouter, Together, vLLM local) con el mismo cliente. Como esos modelos tienen ventanas de contexto cortas, solo se mandan las rutas escribibles y las de estado, con un tope.
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/homologacion/estado` | si hay proveedor configurado |
+| POST | `/homologacion/proponer` | `{device_id}` pide el mapeo de lo que falta (no aplica nada) |
+| POST | `/homologacion/confirmar` | `{key, concept, path}` guarda una sugerencia revisada |
+
 ### Equipos nuevos / descubrimiento (admin)
 Un CPE recién vinculado llega al ACS **sin tag**, y como la multi-tenencia se apoya en los tags, ningún usuario ISP lo ve. El descubrimiento lo detecta y propone a qué ISP pertenece según la IP desde la que informa (la del `ConnectionRequestURL`), cruzada con una tabla de rangos.
 

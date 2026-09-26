@@ -18,8 +18,8 @@ from . import db
 from .config import get_settings, jwt_secret_problem
 from .db import init_db
 from . import discovery as descubrimiento
-from .routers import (auth, backup, config, devices, discovery,
-                      firmware, profiles, settings, system)
+from .routers import (auth, backup, config, devices, discovery, firmware,
+                      homologacion, profiles, settings, system)
 from .security import decode_token
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -62,7 +62,7 @@ app = FastAPI(
 
 
 _AUDIT_PREFIXES = ("/devices", "/firmware", "/settings", "/profiles", "/discovery",
-                    "/auth/users", "/auth/me/password")
+                    "/homologacion", "/auth/users", "/auth/me/password")
 _AUDIT_SKIP = ("read", "refresh")   # solo lectura: no ensucian el historial
 
 
@@ -129,6 +129,10 @@ def _audit_detail(method, parts, b):
                     if method == "POST" else "Borro un rango de descubrimiento")
         if len(parts) > 1 and parts[1] == "mode":
             return f"Descubrimiento en modo {'automatico' if b.get('auto') else 'sugerencia'}"
+    if parts[0] == "homologacion":
+        if len(parts) > 1 and parts[1] == "proponer":
+            return "Pidio a la IA un mapeo para un modelo"
+        return f"Confirmo el mapeo de '{b.get('concept', '')}' propuesto por la IA"
     if parts[0] == "settings": return "Cambio la conexion al ACS"
     if parts[0] == "profiles": return f"Corrigio la ruta de '{b.get('concept', '')}' en un perfil de modelo"
     return f"{method} {seg or '/'.join(parts[:2])}"
@@ -209,6 +213,7 @@ app.include_router(backup.router)
 app.include_router(settings.router)
 app.include_router(profiles.router)
 app.include_router(discovery.router)
+app.include_router(homologacion.router)
 
 # Front-end para usuario final (SPA vanilla). Se monta al final para que las
 # rutas de la API y /docs tengan precedencia; el resto sirve la app web.
