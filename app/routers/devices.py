@@ -10,7 +10,7 @@ from ..bulk import resolve_targets
 from ..deps import CurrentUser, authorized_device, current_user, tenant_query
 from ..genieacs import genie
 from ..parammap import pick_map, resolve
-from ..treeprofile import coverage
+from ..treeprofile import coverage, derive, effective_params
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
@@ -344,12 +344,18 @@ async def device_status(device_id: str, dev=Depends(authorized_device)):
               # cuanto arbol tiene el ACS: si esta incompleto, la ficha sale a medias
               # y no es culpa del equipo, es que falta el GetParameterNames
               "tree": coverage(full),
+              # instancias deducidas del arbol (que interfaz es la WAN, que radio
+              # es cada banda...) con la evidencia de por que se eligieron
+              "profile": derive(full),
               "manufacturer": did.get("_Manufacturer"),
               "model": model_name,
               "serial": did.get("_SerialNumber"),
               "name": meta.get("name"), "customer": meta.get("customer"), "notes": meta.get("notes")}
+    # el mapa escrito a mano manda; la deduccion solo rellena lo que ese mapa
+    # apunta a instancias que ESTE equipo no tiene (ver treeprofile.effective_params)
+    eff = effective_params(pmap, full)
     for k in _STATUS_KEYS:
-        r = resolve(pmap, k)
+        r = eff.get(k) or resolve(pmap, k)
         if r:
             result[k] = _read(full, r[0])
     # sobreescribir WAN con la conexion realmente activa (solo TR-098; TR-181 usa otro modelo)
@@ -369,32 +375,12 @@ async def device_status(device_id: str, dev=Depends(authorized_device)):
         except Exception:
             pass
     else:
-        # TR-181: WAN desde la interfaz Internet + PPPoE
-        try:
-            ifnode = full.get("Device", {}).get("IP", {}).get("Interface", {})
-            wan = None
-            for k, v in ifnode.items():
-                if isinstance(v, dict) and _val(v, "X_TP_ServiceType") == "Internet":
-                    wan = v
-                    break
-            if isinstance(wan, dict):
-                addr = (wan.get("IPv4Address", {}) or {}).get("1", {})
-                result["wan_mode"] = _val(addr, "AddressingType")
-                result["wan_ip"] = _val(addr, "IPAddress")
-            # gateway TR-181: buscar en Routing una ruta con gateway
-            rt = full.get("Device", {}).get("Routing", {}).get("Router", {}).get("1", {}).get("IPv4Forwarding", {})
-            if isinstance(rt, dict):
-                for k, v in rt.items():
-                    if isinstance(v, dict):
-                        gw = _val(v, "GatewayIPAddress")
-                        if gw and gw not in ("", "0.0.0.0"):
-                            result["wan_gateway"] = gw
-                            break
-            if result.get("pppoe_status") in ("Connected", "Connecting", "Up"):
-                result["wan_mode"] = "PPPoE"
-                result["pppoe_enable"] = True
-        except Exception:
-            pass
+        # TR-181: la WAN (interfaz, modo, IP, mascara, gateway) ya la resolvio el
+        # perfil derivado; antes se buscaba a mano el X_TP_ServiceType, que solo
+        # existe en algunos TP-Link y dejaba sin WAN al resto de modelos.
+        if result.get("pppoe_status") in ("Connected", "Connecting", "Up"):
+            result["wan_mode"] = "PPPoE"
+            result["pppoe_enable"] = True
     return result
 
 
