@@ -77,7 +77,7 @@ El registro guarda **qué** se hizo (frase legible: "Acceso remoto ACTIVADO", "c
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET  | `/devices` | lista (id, name, customer, tags, modelo, firmware, último inform), filtrada por tenencia |
-| GET  | `/devices/{id}/status` | ficha de estado (dispositivo, WAN activa, LAN, WiFi con clientes, PPPoE con estado, MAC, name/customer) + `tree`: cuántos parámetros tiene el ACS de ese equipo y si falta refrescar |
+| GET  | `/devices/{id}/status` | ficha de estado (dispositivo, WAN activa, LAN, WiFi con clientes, PPPoE con estado, MAC, name/customer), `tree` (cuántos parámetros tiene el ACS y si falta refrescar) y `profile` (qué instancia es la WAN, la LAN y cada radio, con la evidencia de por qué) |
 | POST | `/devices/{id}/read` | pide al CPE los parámetros de estado (getParameterValues) |
 | POST | `/devices/{id}/refresh?object=` | GetParameterNames de la raíz (o del `object` dado) |
 | POST | `/devices/read-bulk` | lectura masiva `{all\|tag\|model\|device_ids}` (respeta tenencia) |
@@ -167,6 +167,17 @@ curl -X PUT "$BASE/devices/$DEV/label" -H "$H" -H 'Content-Type: application/jso
 - **Nombre/cliente ≠ tags de GenieACS** (ver sección Identificación).
 
 ## Soporte de modelos (TR-098 y TR-181)
+
+**Perfil derivado del árbol** ([app/treeprofile.py](app/treeprofile.py)): antes de usar el mapa, el panel deduce del propio equipo qué instancia es cada cosa, y así no depende de que todos los modelos numeren igual:
+
+| Concepto | Cómo se deduce |
+|---|---|
+| WAN | la interfaz a la que apunta la **ruta por defecto activa**; si el árbol aún no la trae, la marca de servicio de Internet o la única IP fuera de la LAN |
+| LAN | la interfaz cuya IP cae en la red del **pool DHCP** |
+| WiFi 2.4/5 GHz | la **banda que reporta cada radio**, y el primer SSID colgado de ella (con su AccessPoint por referencia) |
+| PPPoE | la conexión que el equipo declara como servicio por defecto (TR-098) o la `PPP.Interface` existente (TR-181) |
+
+La convivencia con los mapas es conservadora: **el mapa escrito a mano manda**, y la deducción solo se usa donde ese mapa apunta a una instancia que ese equipo no tiene (antes, ese campo salía vacío). Cada deducción viene con su evidencia en `profile.evidencia`, para poder auditar por qué el panel eligió esa ruta.
 
 La traducción concepto→path TR-069 vive en [app/parammap.py](app/parammap.py) con dos mapas: **TR-098** (`InternetGatewayDevice.*`, probado en Cudy WR3000/AX3000) y **TR-181** (`Device.*`, probado en TP-Link EX511). `pick_map()` elige automáticamente según la **raíz que reporta cada equipo**, así una flota mixta funciona sin cambiar la config de los CPE. Para otra marca: agregar/ajustar el dict correspondiente.
 
