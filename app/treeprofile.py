@@ -330,3 +330,119 @@ def effective_params(pmap: dict, doc: dict, overrides: dict | None = None) -> di
         elif mapeada:
             out[key] = mapeada
     return out
+
+
+# ---------------------------------------------------------------------------
+# Escritura de la WAN en TR-181.
+#
+# Aprendido del TP-Link EX511 (y del fiasco del acceso remoto): no basta con el
+# parametro estandar, hay que mandar tambien el propietario `X_TP_*` en la misma
+# tarea o el equipo revierte. Y solo se escribe lo que el arbol del equipo TIENE:
+# mandar rutas inexistentes provoca faults en el ACS.
+# ---------------------------------------------------------------------------
+
+class WanNoSoportada(ValueError):
+    """La WAN no se puede configurar en este equipo con los datos disponibles."""
+
+
+def wan_write_values(doc: dict, mode: str, ip=None, mask=None, gateway=None,
+                     dns=None, mtu=None) -> tuple[list, list]:
+    """(valores a escribir, notas) para poner la WAN TR-181 en DHCP o estatica.
+
+    Lanza WanNoSoportada con el motivo cuando falta informacion para hacerlo
+    con seguridad (tipicamente: el arbol todavia no esta refrescado)."""
+    if root_of(doc) != "Device":
+        raise WanNoSoportada("Este equipo no reporta el modelo de datos TR-181")
+    vals = {p: v for p, v, _w in flatten(doc)}
+    d = derive(doc)
+    iface = d.get("wan")
+    if not iface:
+        raise WanNoSoportada(
+            'No se ha podido identificar la interfaz WAN de este equipo. '
+            'Pulsa "Actualizar" en la ficha para que reporte su arbol completo.')
+    base = f"Device.IP.Interface.{iface}"
+    notas = [f"interfaz WAN {base} ({(d.get('evidencia') or {}).get('wan', 'deducida')})"]
+    values = []
+
+    def poner(path, valor, tipo="xsd:string"):
+        if path in vals:                      # solo lo que el equipo expone
+            values.append([path, valor, tipo])
+            return True
+        return False
+
+    def sin_modo():
+        """Sin el parametro de direccionamiento no hay nada que escribir. Si el
+        arbol esta a medias, el motivo es ese y tiene arreglo; si esta completo,
+        es que el modelo no lo soporta."""
+        if not coverage(doc)["complete"]:
+            return WanNoSoportada(
+                "El ACS todavia no tiene el arbol completo de este equipo, asi que no conoce "
+                'los parametros de su WAN. Pulsa "Actualizar" en la ficha y reintenta.')
+        return WanNoSoportada("El equipo no expone el modo de direccionamiento de su WAN")
+
+    if mode == "dhcp":
+        if not poner(f"{base}.IPv4Address.1.AddressingType", "DHCP"):
+            raise sin_modo()
+        if poner(f"{base}.X_TP_ConnType", "DHCP"):
+            notas.append("se manda tambien X_TP_ConnType (si no, el equipo revierte)")
+    elif mode == "static":
+        if not (ip and mask and gateway):
+            raise WanNoSoportada("En modo estatico se requieren ip, mask y gateway")
+        if not poner(f"{base}.IPv4Address.1.AddressingType", "Static"):
+            raise sin_modo()
+        poner(f"{base}.IPv4Address.1.IPAddress", ip)
+        poner(f"{base}.IPv4Address.1.SubnetMask", mask)
+        if poner(f"{base}.X_TP_ConnType", "Static"):
+            notas.append("se manda tambien X_TP_ConnType (si no, el equipo revierte)")
+        ruta = _ruta_de_la_interfaz(vals, iface)
+        if not ruta:
+            raise WanNoSoportada(
+                "No se encuentra la ruta por defecto de la WAN en este equipo, asi que no se "
+                'puede fijar el gateway sin dejarlo incomunicado. Pulsa "Actualizar" y reintenta.')
+        values.append([f"{ruta}.GatewayIPAddress", gateway, "xsd:string"])
+        poner(f"{ruta}.Enable", True, "xsd:boolean")
+        poner(f"{base}.X_TP_SetDefaultGateway", True, "xsd:boolean")
+        notas.append(f"gateway en {ruta}")
+        if dns:
+            destino = _dns_activo(vals)
+            if destino:
+                values.append([destino, ",".join(dns), "xsd:string"])
+                notas.append(f"DNS en {destino}")
+            else:
+                notas.append("el equipo no expone DNS configurable: se ignora ese campo")
+    else:
+        raise WanNoSoportada(f"Modo de WAN no soportado: {mode}")
+
+    if mtu:
+        poner(f"{base}.MaxMTUSize", mtu, "xsd:unsignedInt")
+    return values, notas
+
+
+def _ruta_de_la_interfaz(vals: dict, iface: str) -> str | None:
+    """Entrada de la tabla de rutas que apunta a esa interfaz."""
+    for path, valor in vals.items():
+        m = re.match(r"^(Device\.Routing\.Router\.\d+\.IPv4Forwarding\.\d+)\.Interface$", path)
+        if m and _ref(valor) == iface:
+            return m.group(1)
+    return None
+
+
+def _dns_activo(vals: dict) -> str | None:
+    """El reenviador DNS habilitado, o el primero que exista."""
+    candidatos = []
+    for path in vals:
+        m = re.match(r"^(Device\.DNS\.Relay\.Forwarding\.\d+)\.DNSServer$", path)
+        if m:
+            candidatos.append(m.group(1))
+    for base in sorted(candidatos):
+        if str(vals.get(f"{base}.Enable")).lower() == "true":
+            return f"{base}.DNSServer"
+    return f"{sorted(candidatos)[0]}.DNSServer" if candidatos else None
+
+
+def wan_current_ip(doc: dict) -> str | None:
+    """IP WAN actual segun el perfil derivado (para la guarda de 'misma red')."""
+    dp = derived_params(doc).get("wan_ip")
+    if not dp:
+        return None
+    return {p: v for p, v, _w in flatten(doc)}.get(dp[0])

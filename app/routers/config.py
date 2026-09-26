@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from ..deps import authorized_device
 from ..genieacs import genie
 from ..parammap import pick_map, resolve
+from ..treeprofile import WanNoSoportada, wan_current_ip, wan_write_values
 from ..schemas import AccessIn, ActionResult, DnsIn, IpIn, PppoeIn, TimeIn, WanIn, WifiIn
 from .backup import merge_device_config
 
@@ -81,6 +82,36 @@ async def get_wan(device_id: str, dev=Depends(authorized_device)):
     return {"count": len(conns), "connections": conns}
 
 
+def _validar_estatico(body, ip_actual: str | None, device_id: str) -> None:
+    """Guardas de la WAN estatica, iguales en TR-098 y TR-181: datos validos,
+    gateway en la misma subred, y no saltar a otra red (perderia el ACS)."""
+    if not (body.ip and body.mask and body.gateway):
+        raise HTTPException(400, "En modo estatico se requieren ip, mask y gateway")
+    try:
+        net = ipaddress.IPv4Network(f"{body.ip}/{body.mask}", strict=False)
+        ip_addr = ipaddress.IPv4Address(body.ip)
+        gw_addr = ipaddress.IPv4Address(body.gateway)
+    except ValueError:
+        raise HTTPException(400, "IP, mascara o gateway invalidos")
+    if gw_addr not in net:
+        raise HTTPException(400, f"El gateway {body.gateway} no esta en la misma red que la IP "
+                                 f"{body.ip}/{body.mask} ({net}). Corrige los datos o perderas el enlace.")
+    if ip_addr == gw_addr:
+        raise HTTPException(400, "La IP y el gateway no pueden ser iguales")
+    if ip_actual:
+        try:
+            fuera = ipaddress.IPv4Address(ip_actual) not in net
+        except ValueError:
+            fuera = False
+        if fuera:
+            raise HTTPException(400,
+                f"La nueva IP {body.ip}/{body.mask} esta en otra red distinta a la actual del "
+                f"equipo ({ip_actual}). Perderias el enlace con el ACS. Usa una IP de la red actual "
+                f"o hazlo localmente en el equipo.")
+    else:
+        log.warning("WAN %s: sin IP actual conocida, se aplica sin la guarda de misma red", device_id)
+
+
 @router.put("/wan", response_model=ActionResult)
 async def set_wan(device_id: str, body: WanIn, dev=Depends(authorized_device)):
     """Configura la WAN (DHCP o IP estatica) sobre la conexion WAN ACTIVA.
@@ -105,42 +136,35 @@ async def set_wan(device_id: str, body: WanIn, dev=Depends(authorized_device)):
         return ActionResult(applied=res["applied"], queued=res["queued"],
                             detail="WAN PPPoE configurada (se conecta si hay servidor PPPoE)")
 
-    # --- DHCP / estático: por ahora solo TR-098 ---
+    # --- DHCP / estatico en TR-181: sobre la interfaz WAN que deduce el perfil ---
     if not is_tr098:
-        raise HTTPException(400, "DHCP/estático por TR-181 aún no está soportado; usa la pestaña Avanzado. "
-                                 "PPPoE sí está soportado.")
+        full = await genie.get_device(device_id)
+        actual = wan_current_ip(full or {})
+        if body.mode == "static":
+            _validar_estatico(body, actual, device_id)
+        try:
+            values, notas = wan_write_values(full or {}, body.mode, ip=body.ip, mask=body.mask,
+                                             gateway=body.gateway, dns=body.dns, mtu=body.mtu)
+        except WanNoSoportada as e:
+            raise HTTPException(400, str(e))
+        log.info("WAN TR-181 en %s: %s", device_id, "; ".join(notas))
+        res = await genie.set_parameter_values(device_id, values)
+        merge_device_config(device_id, values)
+        modo = "DHCP" if body.mode == "dhcp" else f"IP estatica {body.ip}"
+        return ActionResult(applied=res["applied"], queued=res["queued"],
+                            detail=f"WAN {modo} aplicada ({notas[0]})")
     prefix = await active_wan_prefix(device_id)
     if body.mode == "dhcp":
         values = [[f"{prefix}.AddressingType", "DHCP", "xsd:string"]]
     else:
-        if not (body.ip and body.mask and body.gateway):
-            raise HTTPException(400, "En modo estatico se requieren ip, mask y gateway")
-        # validacion de seguridad: IP/gateway validos y en la misma subred
-        try:
-            net = ipaddress.IPv4Network(f"{body.ip}/{body.mask}", strict=False)
-            ip_addr = ipaddress.IPv4Address(body.ip)
-            gw_addr = ipaddress.IPv4Address(body.gateway)
-        except Exception:
-            raise HTTPException(400, "IP, mascara o gateway invalidos")
-        if gw_addr not in net:
-            raise HTTPException(400, f"El gateway {body.gateway} no esta en la misma red que la IP "
-                                     f"{body.ip}/{body.mask} ({net}). Corrige los datos o perderas el enlace.")
-        if ip_addr == gw_addr:
-            raise HTTPException(400, "La IP y el gateway no pueden ser iguales")
-        # evitar cambiar a una red distinta de la actual (perderia el enlace con el ACS)
         try:
             from .devices import _active_wan
             cur = await _active_wan(device_id)
-            cur_ip = cur.get("ip") if cur else None
-            if cur_ip and ipaddress.IPv4Address(cur_ip) not in net:
-                raise HTTPException(400,
-                    f"La nueva IP {body.ip}/{body.mask} esta en otra red distinta a la actual del "
-                    f"equipo ({cur_ip}). Perderias el enlace con el ACS. Usa una IP de la red actual "
-                    f"o hazlo localmente en el equipo.")
-        except HTTPException:
-            raise
+            actual = cur.get("ip") if cur else None
         except Exception as e:
-            log.warning("WAN %s: no se pudo comprobar la red actual (%s); se aplica sin esa guarda", device_id, e)
+            log.warning("WAN %s: no se pudo leer la WAN actual (%s)", device_id, e)
+            actual = None
+        _validar_estatico(body, actual, device_id)
         values = [
             [f"{prefix}.AddressingType", "Static", "xsd:string"],
             [f"{prefix}.ExternalIPAddress", body.ip, "xsd:string"],

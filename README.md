@@ -107,6 +107,8 @@ El registro guarda **qué** se hizo (frase legible: "Acceso remoto ACTIVADO", "c
 | GET/PUT | `/devices/{id}/access` | acceso remoto WAN `{remote_enable, remote_port?, remote_protocol("HTTP"\|"HTTPS")?}` + admin del equipo `{admin_user?, admin_password?}` |
 | GET/PUT | `/devices/{id}/ipv6-config` | activar IPv6 en la WAN `{enable, type("Auto"\|"DHCPv6"\|"SLAAC"\|"PPPoE"\|"Static")}` (modelos que lo exponen) |
 
+**WAN en TR-181** (TP-Link y similares): además de PPPoE ya se puede fijar **DHCP o IP estática**. La interfaz se toma del perfil derivado; el gateway se escribe en la entrada de la tabla de rutas que apunta a esa interfaz (no en la interfaz), y se manda el parámetro propietario `X_TP_ConnType` junto al estándar, porque si no el equipo revierte. Solo se escriben rutas que el equipo expone: si el árbol está a medias, la API se niega y pide pulsar *Actualizar* en vez de mandar parámetros a ciegas.
+
 **WAN — validaciones de seguridad (modo static):** IP/máscara/gateway válidos, gateway en la misma subred que la IP, y la nueva IP debe estar en la **misma red que la IP WAN actual** del equipo (si no → `400`), para no perder el enlace con el ACS. Se escribe en la **conexión WAN activa**, no en una instancia fija.
 
 ### Sistema / acciones
@@ -193,7 +195,7 @@ La traducción concepto→path TR-069 vive en [app/parammap.py](app/parammap.py)
 Lo que un modelo no exponga simplemente no aparece (p.ej. IPv6 o máx. de clientes en el WR3000; clave WiFi write-only en el EX511); el explorador **Avanzado** (`/params`) muestra el árbol real de cualquier equipo.
 
 Limitaciones actuales por modelo de datos:
-- **WAN DHCP/estático**: solo TR-098. **PPPoE**: TR-098 y TR-181. En TR-181 lo demás vía Avanzado.
+- **WAN DHCP/estático y PPPoE**: TR-098 y TR-181.
 - **Acceso remoto**: TR-098 (Enable+Port) y TR-181 (Enable+Port+Protocol, el TP-Link exige también los `X_TP_*`). Un solo servicio remoto por equipo (no puertos HTTP/HTTPS separados si el firmware no los expone).
 
 ## Seguridad
