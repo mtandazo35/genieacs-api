@@ -138,6 +138,18 @@ El respaldo **se fusiona con cada cambio** aplicado (nunca queda viejo). Un bucl
 | DELETE | `/firmware/{name}` | borrar |
 | POST | `/firmware/push` | envío masivo `{file_name, all\|tag\|model\|device_ids}` (encola; detecta el tipo) |
 
+### DHCP / Option 43: script para MikroTik (admin)
+Un CPE que no recibe la URL del ACS nunca aparece en el panel. Esta sección **genera el script** que la entrega por DHCP; el panel no se conecta a ningún router ni guarda credenciales, y el script trae su bloque para deshacer exactamente lo que añadió.
+
+Tres codificaciones, porque el parque real no respeta el estándar por igual: **TLV** (TR-069 Anexo G: subopción 1 + longitud + URL), **URL plana** (equipos que no entienden TLV) y **opción 125** (enterprise 3561). La opción 43 solo admite un valor por cliente: en **RouterOS 7** un *matcher* por `dslforum.org` permite dar TLV a unos y plana a otros; en **v6** no hay matchers y hay que elegir.
+
+El script **no crea redes**: asigna el conjunto de opciones a redes que ya existen, para no tocar el DHCP de un ISP en producción.
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/provisioning/dhcp/defaults` | URL del ACS deducida del NBI configurado |
+| POST | `/provisioning/dhcp/script` | `{acs_url?, networks[], routeros, encoding, include_125}` → script + avisos |
+
 ### Homologación asistida por IA (admin, opcional)
 Para los conceptos que las reglas deterministas no resuelven en un modelo concreto (normalmente parámetros propietarios), se le puede pedir una propuesta de mapeo a un modelo de lenguaje. **Queda apagada si no hay clave configurada.**
 
@@ -226,6 +238,14 @@ Lo que un modelo no exponga simplemente no aparece (p.ej. IPv6 o máx. de client
 Limitaciones actuales por modelo de datos:
 - **WAN DHCP/estático y PPPoE**: TR-098 y TR-181.
 - **Acceso remoto**: TR-098 (Enable+Port) y TR-181 (Enable+Port+Protocol, el TP-Link exige también los `X_TP_*`). Un solo servicio remoto por equipo (no puertos HTTP/HTTPS separados si el firmware no los expone).
+
+## Panel: página de Aprovisionamiento (admin)
+
+Una página con tres pestañas, que son la cara visible de todo lo anterior:
+
+- **Equipos nuevos**: bandeja de los que llegan sin tag, con el ISP sugerido y el motivo; tabla de rangos `CIDR → ISP`; y el interruptor entre sugerir y asignar solo.
+- **Perfiles de modelo**: catálogo por modelo+firmware con la evidencia de cada deducción, las correcciones manuales, y el botón de proponer mapeo con IA cuando hay proveedor configurado.
+- **DHCP / Option 43**: el generador del script para MikroTik, con vista previa, copiar y descargar `.rsc`.
 
 ## Seguridad
 

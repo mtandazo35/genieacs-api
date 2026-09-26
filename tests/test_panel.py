@@ -1,0 +1,56 @@
+"""Comprobaciones del panel web.
+
+app.js engancha los eventos al cargar: `$("#x").addEventListener(...)`. Si ese
+id no existe en el HTML, la excepcion corta la ejecucion del script entero y el
+panel se queda muerto, sin que ningun test de la API lo note. Estas pruebas
+cruzan lo que el JS usa contra lo que el HTML tiene.
+"""
+import re
+from pathlib import Path
+
+import pytest
+
+ESTATICOS = Path(__file__).resolve().parent.parent / "app" / "static"
+HTML = (ESTATICOS / "index.html").read_text(encoding="utf-8")
+JS = (ESTATICOS / "app.js").read_text(encoding="utf-8")
+
+IDS_HTML = set(re.findall(r'id="([^"]+)"', HTML))
+
+
+def _ids_usados_en_js() -> set:
+    """Ids que el JS busca con $("#id") (fuera de plantillas y cadenas dinamicas)."""
+    return {m for m in re.findall(r'\$\("#([A-Za-z0-9_-]+)"\)', JS)}
+
+
+def test_todos_los_ids_que_usa_el_js_existen_en_el_html():
+    faltan = sorted(_ids_usados_en_js() - IDS_HTML)
+    assert not faltan, f"el JS engancha ids que no estan en el HTML: {faltan}"
+
+
+def test_cada_enlace_de_navegacion_tiene_su_pagina_y_su_carga():
+    navs = set(re.findall(r'data-nav="([a-z]+)"', HTML))
+    for nav in navs:
+        assert f'nav !== "{nav}"' in JS or f'nav === "{nav}"' in JS, \
+            f"la navegacion no contempla '{nav}'"
+
+
+def test_las_subpestanas_de_aprovisionamiento_tienen_panel():
+    subs = set(re.findall(r'data-psub="([a-z]+)"', HTML))
+    paneles = set(re.findall(r'data-ppanel="([a-z]+)"', HTML))
+    assert subs and subs == paneles, f"subpestanas {subs} vs paneles {paneles}"
+
+
+def test_la_pagina_de_aprovisionamiento_es_solo_para_admin():
+    assert '$("#nav-prov").classList.toggle("hidden", S.role !== "admin")' in JS
+
+
+@pytest.mark.parametrize("endpoint", [
+    "/discovery", "/discovery/rules", "/discovery/assign", "/discovery/mode",
+    "/profiles", "/homologacion/estado", "/homologacion/proponer",
+    "/provisioning/dhcp/defaults", "/provisioning/dhcp/script",
+])
+def test_el_panel_llama_a_endpoints_que_existen(client, admin_h, endpoint):
+    """Cada ruta que usa el panel tiene que existir en la API (no 404)."""
+    assert endpoint in JS, f"el panel no usa {endpoint}"
+    rutas = set(client.get("/openapi.json").json()["paths"])
+    assert endpoint in rutas, f"{endpoint} no existe en la API"
