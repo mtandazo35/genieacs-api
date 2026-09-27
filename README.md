@@ -245,6 +245,19 @@ Limitaciones actuales por modelo de datos:
 - **WAN DHCP/estático y PPPoE**: TR-098 y TR-181.
 - **Acceso remoto**: TR-098 (Enable+Port) y TR-181 (Enable+Port+Protocol, el TP-Link exige también los `X_TP_*`). Un solo servicio remoto por equipo (no puertos HTTP/HTTPS separados si el firmware no los expone).
 
+## Panel: Ajustes
+
+**Ajustes** pasa a ser accesible para cualquier usuario y se organiza en subpestañas:
+
+| Subpestaña | Quién la ve | Qué hay |
+|---|---|---|
+| Mi cuenta | todos | cambiar la propia contraseña (antes era una entrada suelta del menú) |
+| Tema | todos | las cuatro paletas del panel |
+| Conexión al ACS | admin | la URL del NBI, el timeout y el connection request |
+| Inteligencia artificial | admin | proveedor, clave y modelo para la homologación asistida |
+
+Lo que toca servidores queda marcado como `admin-only` y no se le muestra a un usuario ISP; su cuenta y el tema, sí.
+
 ## Panel: temas
 
 En **Ajustes → Tema** se elige entre cuatro paletas: *Pizarra* (la de siempre), *Templada*, *Noche* y *Claro*. La elección se guarda en el navegador de cada persona, no en el servidor, y se aplica nada más cargar el panel.
