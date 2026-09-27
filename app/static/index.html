@@ -614,7 +614,8 @@
           <label>Modelo<input id="llm-model" placeholder="por defecto, el del proveedor"></label>
         </div>
         <label>Clave de API<input id="llm-key" type="password" autocomplete="off" placeholder="pegar aquí (no se vuelve a mostrar)"></label>
-        <label>URL del proveedor<input id="llm-base" placeholder="opcional; por defecto la del proveedor"></label>
+        <label>URL del API<input id="llm-base" placeholder="vacío = https://api.groq.com/openai/v1"></label>
+        <p class="muted small">Es la URL del <b>API</b>, no la de la consola web: para Groq, <code>https://api.groq.com/openai/v1</code>. Déjala vacía y se usa la del proveedor elegido.</p>
         <div id="llm-state" class="muted small"></div>
         <div class="row">
           <button type="button" id="llm-test" class="ghost">Probar</button>

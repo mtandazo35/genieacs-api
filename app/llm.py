@@ -44,10 +44,12 @@ def configurado() -> bool:
     return bool(runtime.llm_config()["api_key"])
 
 
-def _destino() -> tuple[str, str, str]:
-    """(base_url, modelo, clave) efectivos: lo del panel manda sobre el .env."""
-    cfg = runtime.llm_config()
-    if not cfg["api_key"]:
+def _destino(cfg: dict | None = None) -> tuple[str, str, str]:
+    """(base_url, modelo, clave) efectivos: lo del panel manda sobre el .env.
+
+    Con `cfg` se prueba una configuracion que todavia no esta guardada."""
+    cfg = cfg or runtime.llm_config()
+    if not cfg.get("api_key"):
         raise LLMNoConfigurado(
             "No hay proveedor de IA configurado: ponlo en Ajustes > Inteligencia artificial "
             "(o con GENIEACS_API_LLM_API_KEY en el .env).")
@@ -55,9 +57,11 @@ def _destino() -> tuple[str, str, str]:
     return (cfg["base_url"] or base), (cfg["model"] or modelo), cfg["api_key"]
 
 
-async def probar() -> dict:
-    """Comprueba que la clave y el modelo funcionan, con la peticion mas barata."""
-    base, modelo, clave = _destino()
+async def probar(cfg: dict | None = None) -> dict:
+    """Comprueba que la clave y el modelo funcionan, con la peticion mas barata.
+
+    Acepta una configuracion sin guardar para poder probar antes de guardarla."""
+    base, modelo, clave = _destino(cfg)
     async with httpx.AsyncClient(timeout=30.0) as c:
         r = await c.post(f"{base}/chat/completions",
                          json={"model": modelo, "max_tokens": 1,
@@ -65,7 +69,9 @@ async def probar() -> dict:
                          headers={"Authorization": f"Bearer {clave}"})
     if r.status_code == 200:
         return {"ok": True, "modelo": modelo, "proveedor": base}
-    detalle = {401: "la clave no es valida", 404: "ese modelo no existe en el proveedor",
+    detalle = {401: "la clave no es valida",
+               403: "la clave no tiene permiso para este modelo",
+               404: f"{base} no responde como API (revisa la URL) o ese modelo no existe",
                429: "limite de peticiones del proveedor"}.get(r.status_code, f"HTTP {r.status_code}")
     return {"ok": False, "modelo": modelo, "proveedor": base, "error": detalle}
 

@@ -33,6 +33,24 @@ class SettingsIn(BaseModel):
     default_connection_request: Optional[bool] = None
 
 
+# las consolas web de los proveedores no son endpoints de API: es el error
+# mas comun al configurarlo a mano
+_CONSOLAS = ("console.", "dashboard.", "app.", "platform.")
+
+
+def _url_de_consola(url: str | None) -> str | None:
+    """Motivo por el que esa URL no puede ser la del API, o None."""
+    if not url:
+        return None
+    host = url.split("//", 1)[-1].split("/")[0].lower()
+    if host.startswith(_CONSOLAS):
+        sugerida = {"console.groq.com": "https://api.groq.com/openai/v1"}.get(host, "")
+        extra = f" Usa {sugerida}" if sugerida else " Usa la URL del API del proveedor"
+        return (f"{host} es la consola web del proveedor, no su API.{extra}, "
+                "o deja el campo vacio para la que trae por defecto.")
+    return None
+
+
 class LLMIn(BaseModel):
     provider: Optional[str] = Field(None, pattern="^(groq|openai|openrouter|local)$")
     api_key: Optional[str] = Field(None, max_length=300,
@@ -79,6 +97,9 @@ async def set_llm(body: LLMIn):
     """Guarda el proveedor de IA. Una clave vacia borra la guardada."""
     if body.base_url and not body.base_url.startswith(("http://", "https://")):
         raise HTTPException(400, "La URL del proveedor debe empezar por http:// o https://")
+    problema = _url_de_consola(body.base_url)
+    if problema:
+        raise HTTPException(400, problema)
     if body.provider is not None:
         db.set_setting(runtime.K_LLM_PROVIDER, body.provider)
     if body.model is not None:
@@ -93,10 +114,21 @@ async def set_llm(body: LLMIn):
 
 
 @router.post("/llm/test")
-async def test_llm():
-    """Hace la peticion mas barata posible para ver si la clave funciona."""
+async def test_llm(body: LLMIn | None = None):
+    """Prueba la configuracion. Si se manda una en el cuerpo, se prueba ESA sin
+    guardarla: si no, habria que guardar una clave para descubrir que no sirve."""
+    cfg = None
+    if body and (body.api_key or body.base_url or body.model or body.provider):
+        guardada = runtime.llm_config()
+        cfg = {"provider": body.provider or guardada["provider"],
+               "api_key": body.api_key or guardada["api_key"],
+               "model": (body.model if body.model is not None else guardada["model"]),
+               "base_url": (body.base_url if body.base_url is not None else guardada["base_url"])}
+        problema = _url_de_consola(cfg["base_url"])
+        if problema:
+            return {"ok": False, "error": problema}
     try:
-        return await llm.probar()
+        return await llm.probar(cfg)
     except llm.LLMNoConfigurado as e:
         return {"ok": False, "error": str(e)}
     except Exception as e:

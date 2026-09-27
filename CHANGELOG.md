@@ -5,6 +5,10 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 ## [No publicado]
 
 ### Corregido
+- **La prueba del proveedor de IA exigía guardar primero.** Se escribía la clave, se pulsaba *Probar* y respondía "no hay proveedor configurado", porque probaba la configuración guardada y no la del formulario. Ahora prueba lo que hay escrito sin guardarlo: si la clave no sirve, no acaba almacenada.
+- **La URL de la consola web se aceptaba como si fuera el API.** `https://console.groq.com` es el panel de Groq, no su endpoint; al guardarla, todas las llamadas fallaban con un 404 que parecía culpa del modelo. Ahora se rechaza al guardar y al probar, diciendo cuál es la buena (`https://api.groq.com/openai/v1`), y el 404 del proveedor menciona la URL entre las causas.
+- **Tras pedir el árbol, el panel espera y se actualiza solo.** Antes había que cerrar y reabrir la ficha para ver los datos: el equipo no responde al instante (si el ACS no puede alcanzarlo, espera a su próximo reporte). Ahora la ficha se repinta cuando llega el árbol y avisa de cuántos parámetros trajo; el aviso dice además cada cuánto reporta ese equipo.
+### Corregido
 - **Las subpestañas de una página escondían las de otra.** El manejador de Actualizaciones seleccionaba todas las subpestañas del panel, así que al pulsar una de Aprovisionamiento o de Ajustes, los paneles de Actualizaciones se ocultaban y esa página aparecía vacía hasta volver a pulsar una de sus pestañas. Cada grupo queda acotado a su propia página, y al entrar en cualquiera de ellas el panel de la pestaña activa ya se ve, sin pulsar nada.
 
 ### Cambiado

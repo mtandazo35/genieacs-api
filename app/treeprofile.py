@@ -87,9 +87,12 @@ def coverage(doc: dict) -> dict:
     if complete:
         hint = None
     elif missing:
+        cada = next((v for p, v, _w in params if p.endswith("ManagementServer.PeriodicInformInterval")), None)
+        cuando = (f" Si no responde al momento, lo hara en su proximo reporte (cada {cada} s)."
+                  if cada else "")
         hint = (f"El ACS solo tiene {len(params)} parametros de este equipo: falta "
                 + " y ".join(ETIQUETAS[m] for m in missing)
-                + '. Pulsa "Actualizar" para que el equipo reporte su arbol completo.')
+                + '. Pulsa "Actualizar" para que el equipo reporte su arbol completo.' + cuando)
     else:
         hint = "El equipo no ha reportado todavia un modelo de datos reconocible."
     return {

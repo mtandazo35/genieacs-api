@@ -412,14 +412,39 @@ async function wanRefreshFromDevice(silent) {
 }
 $("#dev-tree-refresh").addEventListener("click", async () => {
   const b = $("#dev-tree-refresh"); b.disabled = true; const prev = b.textContent;
+  const dev = S.current;
+  const antes = (lastStatus && lastStatus.tree && lastStatus.tree.params) || 0;
   b.textContent = "Pidiendo el árbol…";
   try {
-    const r = await api(`/devices/${enc(S.current)}/refresh`, { method: "POST" });
-    toast(r.applied ? "✓ Árbol pedido al equipo; vuelve a abrir la ficha en unos segundos"
-                    : "Petición encolada: se aplicará en el próximo reporte del equipo", "ok");
+    const r = await api(`/devices/${enc(dev)}/refresh`, { method: "POST" });
+    toast(r.applied
+      ? "Árbol pedido al equipo; esperando su respuesta…"
+      : "Encolado: el equipo lo aplicará en su próximo reporte (puede tardar unos minutos)", "info");
+    // el equipo no responde al instante: se espera y se repinta la ficha sola
+    b.textContent = "Esperando al equipo…";
+    const llego = await esperarArbol(dev, antes);
+    if (llego) toast(`✓ Árbol recibido: ${llego} parámetros`, "ok");
+    else toast("El equipo aún no ha respondido; la ficha se actualizará cuando reporte", "info");
   } catch (e) { toast(e.message, "err"); }
   finally { b.disabled = false; b.textContent = prev; }
 });
+
+// Espera a que el ACS tenga mas arbol del que habia, repintando la ficha cuando
+// llega. Devuelve cuantos parametros hay, o 0 si se agoto la espera.
+async function esperarArbol(dev, antes, intentos = 20, cada = 6000) {
+  for (let i = 0; i < intentos; i++) {
+    await new Promise(r => setTimeout(r, cada));
+    if (S.current !== dev) return 0;              // el usuario se fue a otro equipo
+    try {
+      const st = await api(`/devices/${enc(dev)}/status`);
+      if (S.current !== dev) return 0;
+      renderStatus(st);
+      const ahora = (st.tree && st.tree.params) || 0;
+      if (ahora > antes) return ahora;
+    } catch { /* el equipo puede estar reiniciando: se reintenta */ }
+  }
+  return 0;
+}
 
 $("#wan-refresh").addEventListener("click", async () => {
   const b = $("#wan-refresh"); b.disabled = true; const p = b.textContent; b.textContent = "Actualizando…";
@@ -1141,7 +1166,10 @@ $("#llm-test").addEventListener("click", async () => {
   const el = $("#llm-result");
   el.textContent = "Probando…"; el.style.color = "var(--muted)";
   try {
-    const r = await api("/settings/llm/test", { method: "POST" });
+    // se prueba lo que hay escrito, sin obligar a guardar primero
+    const r = await api("/settings/llm/test", { method: "POST", body: {
+      provider: $("#llm-provider").value, model: $("#llm-model").value.trim(),
+      base_url: $("#llm-base").value.trim(), api_key: $("#llm-key").value.trim() || null } });
     if (r.ok) { el.textContent = `✓ Responde (${r.modelo} en ${r.proveedor})`; el.style.color = "var(--ok)"; }
     else { el.textContent = "✗ " + (r.error || "no responde"); el.style.color = "var(--err)"; }
   } catch (e) { el.textContent = "✗ " + e.message; el.style.color = "var(--err)"; }

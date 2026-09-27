@@ -92,3 +92,59 @@ def test_sin_configurar_la_prueba_no_revienta(client, admin_h):
 def test_los_ajustes_de_ia_son_solo_de_admin(client, isp_h):
     assert client.get("/settings/llm", headers=isp_h).status_code == 403
     assert client.put("/settings/llm", headers=isp_h, json={"api_key": "x"}).status_code == 403
+
+# ---------- probar antes de guardar (el fallo real del 2026-09-27) ----------
+
+def test_se_puede_probar_una_clave_sin_haberla_guardado(client, admin_h, monkeypatch):
+    """Antes habia que guardar para probar: si la clave no servia, ya la tenias dentro."""
+    enviado = []
+
+    def handler(req):
+        enviado.append(req.headers.get("authorization"))
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+    real = httpx.AsyncClient
+    monkeypatch.setattr("app.llm.httpx.AsyncClient",
+                        lambda **kw: real(transport=httpx.MockTransport(handler), **kw))
+    r = client.post("/settings/llm/test", headers=admin_h,
+                    json={"provider": "groq", "api_key": "clave-sin-guardar"}).json()
+    assert r["ok"] is True
+    assert enviado == ["Bearer clave-sin-guardar"]
+    # y no se ha guardado nada
+    assert client.get("/settings/llm", headers=admin_h).json()["key_set"] is False
+
+
+def test_probar_sin_cuerpo_sigue_usando_la_guardada(client, admin_h, guardada, monkeypatch):
+    real = httpx.AsyncClient
+    monkeypatch.setattr("app.llm.httpx.AsyncClient", lambda **kw: real(
+        transport=httpx.MockTransport(lambda req: httpx.Response(200, json={"choices": [{}]})), **kw))
+    assert client.post("/settings/llm/test", headers=admin_h).json()["ok"] is True
+
+
+def test_la_url_de_la_consola_se_rechaza_con_la_buena(client, admin_h):
+    """console.groq.com es la web del proveedor, no su API: error comun al configurarlo."""
+    r = client.put("/settings/llm", headers=admin_h,
+                   json={"base_url": "https://console.groq.com"})
+    assert r.status_code == 400
+    detalle = r.json()["detail"]
+    assert "consola web" in detalle and "api.groq.com/openai/v1" in detalle
+    # tampoco cuela al probar
+    r = client.post("/settings/llm/test", headers=admin_h,
+                    json={"api_key": "x", "base_url": "https://console.groq.com"}).json()
+    assert r["ok"] is False and "consola web" in r["error"]
+
+
+def test_la_url_correcta_del_api_si_se_acepta(client, admin_h):
+    r = client.put("/settings/llm", headers=admin_h,
+                   json={"base_url": "https://api.groq.com/openai/v1"})
+    assert r.status_code == 200
+    assert client.get("/settings/llm", headers=admin_h).json()["base_url"] == "https://api.groq.com/openai/v1"
+
+
+def test_un_404_del_proveedor_menciona_la_url(client, admin_h, guardada, monkeypatch):
+    """Con una URL que no es API, el 404 confundia: parecia culpa del modelo."""
+    real = httpx.AsyncClient
+    monkeypatch.setattr("app.llm.httpx.AsyncClient", lambda **kw: real(
+        transport=httpx.MockTransport(lambda req: httpx.Response(404, json={})), **kw))
+    r = client.post("/settings/llm/test", headers=admin_h).json()
+    assert r["ok"] is False and "revisa la URL" in r["error"]
