@@ -122,7 +122,10 @@ main{width:100%;max-width:1760px;margin:0 auto;padding:1.5rem clamp(1rem,2.5vw,2
 .subtab:hover{color:var(--txt);border-color:var(--accent)}
 .subtab.active{background:var(--accent-weak);color:var(--accent);border-color:var(--accent)}
 
-.two-col{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.5rem;margin-bottom:1.5rem}
+.two-col{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1.5rem;
+  margin-bottom:1.5rem;align-items:start}
+/* en una rejilla, el formulario llena su columna en vez de dejar hueco al lado */
+.two-col > .card-form{max-width:none;margin-bottom:0}
 .card-form h3{margin:0 0 1rem;font-size:1rem}
 .card-form h4{margin:1.2rem 0 .6rem;font-size:.9rem;color:var(--muted)}
 .filter{margin-bottom:1rem}
@@ -196,12 +199,24 @@ main{width:100%;max-width:1760px;margin:0 auto;padding:1.5rem clamp(1rem,2.5vw,2
   .card-form{max-width:700px}
   .two-col{grid-template-columns:repeat(auto-fit,minmax(420px,1fr))}
 }
-.tbl{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);
-  border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin-bottom:1.5rem}
-.tbl th,.tbl td{padding:.7rem 1rem;text-align:left;border-bottom:1px solid var(--line-soft);vertical-align:top}
-.tbl th{background:var(--bg2);color:var(--muted);font-size:.78rem;text-transform:uppercase;letter-spacing:.04em}
+/* las tablas se desplazan solas en horizontal en vez de romper la pagina */
+.tbl-wrap{overflow-x:auto;margin-bottom:1.5rem;border:1px solid var(--line);
+  border-radius:var(--radius);background:var(--card)}
+.tbl{width:100%;border-collapse:separate;border-spacing:0;background:transparent;min-width:520px}
+.tbl th,.tbl td{padding:.62rem 1rem;text-align:left;border-bottom:1px solid var(--line-soft);
+  vertical-align:middle}
+.tbl th{position:sticky;top:0;z-index:1;background:var(--bg2);color:var(--muted);
+  font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
 .tbl tr:last-child td{border-bottom:0}
+.tbl tbody tr:nth-child(even){background:color-mix(in srgb,var(--card-hi) 45%,transparent)}
 .tbl tbody tr:hover{background:var(--card-hi)}
+/* la ultima columna suele ser la de botones: pegada a la derecha y sin partirse */
+.tbl td:last-child:has(button),.tbl th:last-child{text-align:right;white-space:nowrap}
+.tbl td:last-child button{margin-left:.35rem}
+.tbl code{background:transparent;border:0;padding:0;color:var(--txt)}
+.tbl .num{font-variant-numeric:tabular-nums;text-align:right}
+/* fila unica de 'no hay nada': ocupa el ancho y no se comporta como dato */
+.tbl td[colspan]{color:var(--muted);text-align:center;padding:1.1rem}
 
 /* ---------- avisos flotantes ---------- */
 .toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);padding:.8rem 1.4rem;
@@ -260,6 +275,12 @@ main{width:100%;max-width:1760px;margin:0 auto;padding:1.5rem clamp(1rem,2.5vw,2
 .tema .sw{display:flex;gap:3px}
 .tema .sw i{width:11px;height:17px;border-radius:3px;display:block;border:1px solid rgba(0,0,0,.25)}
 .tema small{display:block;color:var(--muted);font-weight:400;font-size:.75rem}
+
+/* el generador de DHCP: formulario ancho y script a continuacion */
+#dhcp-form{max-width:none}
+#dhcp-script{margin-top:1rem;padding:1rem;font-size:.82rem;line-height:1.5;
+  background:var(--bg);border:1px solid var(--line);border-radius:var(--radius-sm);max-height:50vh}
+.dhcp-red{align-items:end}
 
 /* bloque de ayuda plegable dentro de un formulario */
 .ayuda{border:1px solid var(--line-soft);border-radius:var(--radius-sm);

@@ -30,9 +30,8 @@
       <a href="#" data-nav="updates" id="nav-updates" class="hidden">Actualizaciones</a>
       <a href="#" data-nav="users" id="nav-users" class="hidden">Usuarios</a>
       <a href="#" data-nav="prov" id="nav-prov" class="hidden">Aprovisionamiento</a>
-      <a href="#" data-nav="settings" id="nav-settings" class="hidden">Ajustes</a>
+      <a href="#" data-nav="settings" id="nav-settings">Ajustes</a>
       <a href="#" data-nav="audit" id="nav-audit" class="hidden">Actividad</a>
-      <a href="#" data-nav="account">Mi cuenta</a>
     </nav>
     <div class="user-box">
       <span id="who" class="muted"></span>
@@ -242,13 +241,17 @@
       <div class="panel wide hidden" data-panel="clients">
         <button type="button" id="clients-refresh" class="ghost small" style="margin-bottom:.8rem">↻ Actualizar</button>
         <div id="clients-count" class="muted small"></div>
-        <table class="tbl" id="clients-table"><thead><tr><th>Equipo</th><th>IP</th><th>MAC</th><th>Conexión</th><th>Estado</th></tr></thead><tbody></tbody></table>
+        <div class="tbl-wrap">
+          <table class="tbl" id="clients-table"><thead><tr><th>Equipo</th><th>IP</th><th>MAC</th><th>Conexión</th><th>Estado</th></tr></thead><tbody></tbody></table>
+        </div>
       </div>
 
       <div class="panel wide hidden" data-panel="history">
         <button type="button" id="history-refresh" class="ghost small" style="margin-bottom:.8rem">↻ Actualizar</button>
         <div id="history-count" class="muted small"></div>
-        <table class="tbl" id="history-table"><thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Estado</th></tr></thead><tbody></tbody></table>
+        <div class="tbl-wrap">
+          <table class="tbl" id="history-table"><thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Estado</th></tr></thead><tbody></tbody></table>
+        </div>
         <div id="history-pager" class="pager"></div>
       </div>
 
@@ -298,29 +301,22 @@
         </div>
         <button type="submit">Crear usuario</button>
       </form>
-      <table class="tbl" id="users-table"><thead><tr><th>#</th><th>Usuario</th><th>Rol</th><th>ISP</th><th>Activo</th><th>Acciones</th></tr></thead><tbody></tbody></table>
+      <div class="tbl-wrap">
+        <table class="tbl" id="users-table"><thead><tr><th>#</th><th>Usuario</th><th>Rol</th><th>ISP</th><th>Activo</th><th>Acciones</th></tr></thead><tbody></tbody></table>
+        </div>
     </section>
 
     <!-- Actividad / auditoría (solo admin) -->
     <section id="audit-page" class="hidden">
       <div class="page-head"><h2>Actividad</h2><button id="audit-refresh" class="ghost">↻ Actualizar</button></div>
       <input id="audit-filter" class="filter" placeholder="Filtrar por usuario, acción o equipo…">
-      <table class="tbl" id="audit-table"><thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Equipo</th><th>Estado</th></tr></thead><tbody></tbody></table>
+      <div class="tbl-wrap">
+        <table class="tbl" id="audit-table"><thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Equipo</th><th>Estado</th></tr></thead><tbody></tbody></table>
+        </div>
       <div id="audit-pager" class="pager"></div>
     </section>
 
     <!-- Mi cuenta (todos) -->
-    <section id="account-page" class="hidden">
-      <div class="page-head"><h2>Mi cuenta</h2></div>
-      <form id="account-form" class="card-form">
-        <h3>Cambiar mi contraseña</h3>
-        <div id="account-who" class="muted small"></div>
-        <label>Contraseña actual<input id="acc-current" type="password" required></label>
-        <label>Contraseña nueva<input id="acc-new" type="password" minlength="12" maxlength="128" autocomplete="new-password" required></label>
-        <label>Repetir contraseña nueva<input id="acc-new2" type="password" minlength="12" maxlength="128" autocomplete="new-password" required></label>
-        <button type="submit">Cambiar contraseña</button>
-      </form>
-    </section>
 
     <!-- Actualizaciones (solo admin): Firmware y Respaldos separados -->
     <section id="updates-page" class="hidden">
@@ -354,7 +350,9 @@
         </div>
         <div class="card-form">
           <h3>Firmwares cargados</h3>
-          <table class="tbl" data-list="firmware"><thead><tr><th>Archivo</th><th>Tamaño</th><th></th></tr></thead><tbody></tbody></table>
+          <div class="tbl-wrap">
+            <table class="tbl" data-list="firmware"><thead><tr><th>Archivo</th><th>Tamaño</th><th></th></tr></thead><tbody></tbody></table>
+        </div>
         </div>
         <form class="card-form push-form" data-kind="firmware">
           <h3>Enviar firmware (masivo)</h3>
@@ -397,7 +395,9 @@
         </div>
         <div class="card-form">
           <h3>Archivos de configuración cargados</h3>
-          <table class="tbl" data-list="config"><thead><tr><th>Archivo</th><th>Tamaño</th><th></th></tr></thead><tbody></tbody></table>
+          <div class="tbl-wrap">
+            <table class="tbl" data-list="config"><thead><tr><th>Archivo</th><th>Tamaño</th><th></th></tr></thead><tbody></tbody></table>
+        </div>
         </div>
         <form class="card-form push-form" data-kind="config">
           <h3>Enviar configuración (masivo)</h3>
@@ -429,6 +429,7 @@
 
       <!-- ---- equipos nuevos ---- -->
       <div data-ppanel="nuevos">
+        <div class="two-col">
         <div class="card-form">
           <h3>Modo</h3>
           <p class="muted small" id="disc-modo-txt"></p>
@@ -440,7 +441,6 @@
           </div>
           <button type="button" id="disc-save-mode">Guardar modo</button>
         </div>
-
         <form id="disc-rule-form" class="card-form">
           <h3>Rangos por ISP</h3>
           <p class="muted small">La IP desde la que informa el equipo decide de quién es. Gana el rango más específico; si dos ISP reclaman el mismo, no se asigna.</p>
@@ -451,12 +451,18 @@
           <label>Comentario<input id="disc-comment" placeholder="opcional"></label>
           <button type="submit">Añadir rango</button>
         </form>
-        <table class="tbl" id="disc-rules"><tbody></tbody></table>
+        </div>
 
+        <div class="page-head"><h3>Rangos configurados</h3></div>
+        <div class="tbl-wrap">
+          <table class="tbl" id="disc-rules"><tbody></tbody></table>
+        </div>
         <div class="page-head" style="margin-top:1.5rem">
           <h3>Sin asignar</h3><button id="disc-refresh" class="ghost small">↻ Actualizar</button>
         </div>
-        <table class="tbl" id="disc-list"><tbody></tbody></table>
+        <div class="tbl-wrap">
+          <table class="tbl" id="disc-list"><tbody></tbody></table>
+        </div>
       </div>
 
       <!-- ---- perfiles de modelo ---- -->
@@ -512,26 +518,26 @@
     </section>
 
     <section id="settings-page" class="hidden">
-      <div class="page-head"><h2>Conexión al ACS</h2></div>
-      <form id="settings-form" class="card-form">
-        <p class="muted small">A qué servidor GenieACS se conecta esta API. Si cambia la IP de tu GenieACS, actualízala aquí — se aplica al instante, sin reiniciar.</p>
-        <label>URL del NBI (GenieACS)
-          <input id="set-url" placeholder="http://10.99.99.5:7557" required>
-        </label>
-        <div class="row">
-          <label>Timeout (s)<input id="set-timeout" type="number" min="1" max="300" placeholder="30"></label>
-          <label class="chk"><input type="checkbox" id="set-cr"> Aplicar cambios al instante (connection request)</label>
-        </div>
-        <div id="set-source" class="muted small"></div>
-        <div class="row">
-          <button type="button" data-action="set-test" class="ghost">Probar conexión</button>
-          <button type="submit">Guardar</button>
-        </div>
-        <div id="set-testresult" class="small"></div>
+      <div class="page-head"><h2>Ajustes</h2></div>
+      <div class="subtabs" id="settings-tabs">
+        <button class="subtab active" data-ssub="cuenta">Mi cuenta</button>
+        <button class="subtab" data-ssub="tema">Tema</button>
+        <button class="subtab admin-only hidden" data-ssub="acs">Conexión al ACS</button>
+        <button class="subtab admin-only hidden" data-ssub="ia">Inteligencia artificial</button>
+      </div>
+
+      <div data-spanel="cuenta">
+<form id="account-form" class="card-form">
+        <h3>Cambiar mi contraseña</h3>
+        <div id="account-who" class="muted small"></div>
+        <label>Contraseña actual<input id="acc-current" type="password" required></label>
+        <label>Contraseña nueva<input id="acc-new" type="password" minlength="12" maxlength="128" autocomplete="new-password" required></label>
+        <label>Repetir contraseña nueva<input id="acc-new2" type="password" minlength="12" maxlength="128" autocomplete="new-password" required></label>
+        <button type="submit">Cambiar contraseña</button>
       </form>
+      </div>
 
-
-      <div class="page-head" style="margin-top:2rem"><h2>Tema</h2></div>
+      <div data-spanel="tema" class="hidden">
       <div class="card-form">
         <p class="muted small">El color del panel. Se guarda en este navegador, así que cada persona puede tener el suyo.</p>
         <div class="temas" id="temas" role="group" aria-label="Elegir tema">
@@ -553,8 +559,28 @@
           </button>
         </div>
       </div>
+      </div>
 
-      <div class="page-head" style="margin-top:2rem"><h2>Inteligencia artificial</h2></div>
+      <div data-spanel="acs" class="hidden admin-only">
+      <form id="settings-form" class="card-form">
+        <p class="muted small">A qué servidor GenieACS se conecta esta API. Si cambia la IP de tu GenieACS, actualízala aquí — se aplica al instante, sin reiniciar.</p>
+        <label>URL del NBI (GenieACS)
+          <input id="set-url" placeholder="http://10.99.99.5:7557" required>
+        </label>
+        <div class="row">
+          <label>Timeout (s)<input id="set-timeout" type="number" min="1" max="300" placeholder="30"></label>
+          <label class="chk"><input type="checkbox" id="set-cr"> Aplicar cambios al instante (connection request)</label>
+        </div>
+        <div id="set-source" class="muted small"></div>
+        <div class="row">
+          <button type="button" data-action="set-test" class="ghost">Probar conexión</button>
+          <button type="submit">Guardar</button>
+        </div>
+        <div id="set-testresult" class="small"></div>
+      </form>
+      </div>
+
+      <div data-spanel="ia" class="hidden admin-only">
       <form id="llm-form" class="card-form">
         <p class="muted small">Se usa solo para <b>proponer el mapeo</b> de modelos de CPE que las reglas automáticas no resuelven (Aprovisionamiento → Perfiles). Al proveedor se le envían <b>rutas de parámetros, nunca valores</b>: no salen SSID, claves ni IPs de abonados. Nada se aplica sin que tú lo confirmes.</p>
         <div class="row">
@@ -578,6 +604,7 @@
         </div>
         <div id="llm-result" class="small"></div>
       </form>
+      </div>
     </section>
   </main>
 </div>

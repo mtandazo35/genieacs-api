@@ -73,15 +73,13 @@ function navigate(nav) {
   $("#settings-page").classList.toggle("hidden", nav !== "settings");
   $("#prov-page").classList.toggle("hidden", nav !== "prov");
   $("#updates-page").classList.toggle("hidden", nav !== "updates");
-  $("#account-page").classList.toggle("hidden", nav !== "account");
   $("#audit-page").classList.toggle("hidden", nav !== "audit");
   try { localStorage.setItem("view", nav); localStorage.removeItem("device"); } catch {}
   if (nav === "devices") loadDevices();
   if (nav === "users") loadUsers();
-  if (nav === "settings") { loadSettings(); loadLlm(); }
+  if (nav === "settings") abrirAjustes();
   if (nav === "prov") loadProv();
   if (nav === "updates") loadUpdates();
-  if (nav === "account") loadAccount();
   if (nav === "audit") loadAudit();
 }
 $$("[data-nav]").forEach(a => a.addEventListener("click", (e) => { e.preventDefault(); navigate(a.dataset.nav); }));
@@ -1025,6 +1023,29 @@ function activarTab(nombre) {
 }
 
 
+
+// ---- Ajustes: subpestañas (Mi cuenta, Tema, y lo de admin) ----
+function ajustesSub(sub) {
+  $$("#settings-tabs .subtab").forEach(b => b.classList.toggle("active", b.dataset.ssub === sub));
+  $$("[data-spanel]").forEach(p => p.classList.toggle("hidden", p.dataset.spanel !== sub));
+  if (sub === "cuenta") loadAccount();
+  if (sub === "acs") loadSettings();
+  if (sub === "ia") loadLlm();
+}
+
+$("#settings-tabs").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-ssub]");
+  if (b) ajustesSub(b.dataset.ssub);
+});
+
+function abrirAjustes() {
+  // el ISP solo ve su cuenta y el tema; lo demas toca servidores
+  const admin = S.role === "admin";
+  $$(".admin-only").forEach(el => el.classList.toggle("hidden", !admin));
+  const activa = $$("#settings-tabs .subtab").find(b => b.classList.contains("active") && !b.classList.contains("hidden"));
+  ajustesSub(activa ? activa.dataset.ssub : "cuenta");
+}
+
 // ---- Tema del panel (se guarda en este navegador) ----
 function aplicarTema(tema) {
   if (tema) document.documentElement.setAttribute("data-theme", tema);
@@ -1289,14 +1310,15 @@ async function boot() {
     S.role = "admin";
   } catch { S.role = S.role || "isp"; }
   $("#nav-users").classList.toggle("hidden", S.role !== "admin");
-  $("#nav-settings").classList.toggle("hidden", S.role !== "admin");
+  // Ajustes es para todos: dentro esta Mi cuenta; lo que toca servidores va
+  // en subpestanas .admin-only, que abrirAjustes() oculta al resto
   $("#nav-prov").classList.toggle("hidden", S.role !== "admin");
   $("#nav-updates").classList.toggle("hidden", S.role !== "admin");
   $("#nav-audit").classList.toggle("hidden", S.role !== "admin");
   $("#who").textContent = S.isp ? `ISP: ${S.isp}` : (S.role === "admin" ? "Administrador" : "");
   // restaurar la ultima vista (y equipo) en vez de volver siempre a Equipos
   let view = "devices", dev = null;
-  try { view = localStorage.getItem("view") || "devices"; dev = localStorage.getItem("device"); } catch {}
+  try { view = (localStorage.getItem("view") === "account" ? "settings" : localStorage.getItem("view")) || "devices"; dev = localStorage.getItem("device"); } catch {}
   if (["updates", "users", "settings"].includes(view) && S.role !== "admin") view = "devices";
   navigate(view);
   if (dev) openDevice(dev);

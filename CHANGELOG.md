@@ -4,6 +4,11 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [No publicado]
 
+### Cambiado
+- **Ajustes reorganizado en subpestañas** (Mi cuenta, Tema, Conexión al ACS e Inteligencia artificial) y accesible para **cualquier rol**: *Mi cuenta* deja de ser una entrada suelta del menú y vive ahí dentro, mientras que lo que toca servidores queda reservado al admin. Quien tuviera guardada la vista antigua aterriza en Ajustes en vez de en una página que ya no existe.
+- **Tablas revisadas**: cabecera fija al desplazar, filas alternas, columna de acciones pegada a la derecha, cifras alineadas y cada tabla dentro de un contenedor que se desplaza en horizontal en vez de romper la página en pantallas pequeñas.
+- **Aprovisionamiento aprovecha el ancho**: en *Equipos nuevos* los formularios de modo y de rangos van en dos columnas cuando hay sitio, y el generador de DHCP deja de estar encajonado en media pantalla.
+
 ### Añadido
 - **Apartado de temas** (Ajustes → Tema): cuatro paletas seleccionables — *Pizarra* (la de siempre), *Templada* (gris verdoso y turquesa), *Noche* (azul marino e índigo) y *Claro* (fondo blanco, para trabajar de día). Se guarda en el navegador, así que cada persona puede tener el suyo, y se aplica al cargar y no solo al entrar en Ajustes. El tema claro declara `color-scheme` para que los controles nativos y las barras de desplazamiento acompañen. Una prueba comprueba que ningún tema se deje un color sin definir: el navegador no avisa de eso y acabaría mezclando colores de dos paletas.
 - **Documentación de los comandos de MikroTik para el DHCP** ([DEPLOY.md](DEPLOY.md#entregar-el-acs-por-dhcp-mikrotik)): ejemplo completo y pegable con las tres codificaciones, el matcher por `dslforum.org`, cómo comprobarlo, cómo deshacerlo, y por qué la opción 43 no sirve de nada si el CPE tiene el cliente TR-069 apagado. El mismo resumen está dentro del panel, plegable, en la pestaña DHCP. Una prueba compara el ejemplo con lo que genera el código: si cambia el generador y no la documentación, falla el CI.
