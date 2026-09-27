@@ -129,13 +129,85 @@ Si el proxy está en **otra** máquina, cambia en el servicio `--host 127.0.0.1`
 
 Acceso de emergencia sin proxy (túnel SSH): `ssh -L 8080:127.0.0.1:8080 root@<vm>` y abrir `http://localhost:8080/`.
 
+## Entregar el ACS por DHCP (MikroTik)
+
+Un CPE que no recibe la URL del ACS **nunca aparece** en el panel. La vía estándar es la opción 43 del DHCP: el equipo se anuncia en la opción 60 como `dslforum.org` y el servidor le responde con la URL.
+
+El panel genera este script con tus valores en **Aprovisionamiento → DHCP / Option 43** (o `POST /provisioning/dhcp/script`). Abajo queda el ejemplo completo, con una red de documentación (`192.0.2.0/24`) y un ACS en `10.20.30.5`, para tenerlo a mano sin abrir el panel.
+
+### Las tres codificaciones, y por qué hay tres
+
+| Codificación | Qué manda | Cuándo hace falta |
+|---|---|---|
+| **TLV** (opción 43) | subopción 1 + longitud + URL | es lo que dice TR-069; lo entienden los equipos que siguen el estándar |
+| **URL plana** (opción 43) | la URL tal cual | muchos equipos baratos no entienden el TLV y solo leen la cadena |
+| **Opción 125** | enterprise 3561 (BBF) + la misma subopción | algunos Huawei y ONT la piden en vez de la 43 |
+
+La opción 43 **solo admite un valor por cliente**: o TLV o cadena plana. En **RouterOS 7** un *matcher* por la opción 60 permite dar TLV a quien se anuncia como `dslforum.org` y la plana al resto; en **RouterOS 6 no existen los matchers**, así que hay que elegir una.
+
+### Ejemplo completo (RouterOS 7, ambas codificaciones)
+
+El valor hexadecimal no es un número mágico: es `0x01` (subopción 1) + la longitud en bytes + la URL en hexadecimal. Para `http://10.20.30.5:7547/`, que mide 23 bytes (`0x17`), sale `0x0117...`. Si cambias la URL, **cambia también la longitud**; por eso conviene generarlo en el panel en vez de copiar y editar a mano.
+
+```rsc
+/ip dhcp-server option
+add code=43 name=tr069-genieacs-tlv value=0x0117687474703a2f2f31302e32302e33302e353a373534372f comment="tr069-genieacs (subopcion 1 = URL del ACS)"
+add code=43 name=tr069-genieacs-plana value="'http://10.20.30.5:7547/'" comment="tr069-genieacs (URL sin TLV)"
+add code=125 name=tr069-genieacs-125 value=0x00000de9190117687474703a2f2f31302e32302e33302e353a373534372f comment="tr069-genieacs (enterprise 3561)"
+
+/ip dhcp-server option sets
+add name=tr069-genieacs-tlv options=tr069-genieacs-tlv,tr069-genieacs-125 comment="tr069-genieacs"
+add name=tr069-genieacs-plana options=tr069-genieacs-plana,tr069-genieacs-125 comment="tr069-genieacs"
+
+# El CPE que se anuncia como dslforum.org entiende TLV; al resto se le da la URL plana.
+/ip dhcp-server matcher
+add name=tr069-genieacs-dslforum code=60 matching-type=substring value="dslforum.org" option-set=tr069-genieacs-tlv server=all comment="tr069-genieacs"
+
+# Se asigna a redes que YA existen; este script no crea ninguna red.
+/ip dhcp-server network
+set [find address="192.0.2.0/24"] dhcp-option-set=tr069-genieacs-plana
+```
+
+### Comprobar que quedó puesto
+
+```rsc
+/ip dhcp-server option print where name~"tr069-genieacs"
+/ip dhcp-server network print detail
+/ip dhcp-server lease print detail          # mira la opción 60 que anuncia cada CPE
+```
+
+Y en el ACS, que el equipo aparezca: el panel lo lista en cuanto hace su primer *inform*.
+
+### Deshacer
+
+```rsc
+/ip dhcp-server network
+set [find address="192.0.2.0/24"] dhcp-option-set=""
+/ip dhcp-server matcher remove [find comment="tr069-genieacs"]
+/ip dhcp-server option sets remove [find comment="tr069-genieacs"]
+/ip dhcp-server option remove [find comment~"tr069-genieacs"]
+```
+
+Todo lo que crea el script lleva el comentario `tr069-genieacs`, así que el bloque de arriba borra eso y nada más.
+
+### Lo que el DHCP no puede arreglar
+
+La opción 43 solo le dice **a dónde llamar** a un cliente TR-069 que ya está corriendo. Si el equipo tiene el TR-069 apagado —típico en modo AP, o en algunos modelos tras un factory reset— no hay ajuste de DHCP que lo levante: hay que activarlo en su interfaz web, o pedir firmware con el ACS precargado. Para saber en cuál de los dos casos estás, mira si el equipo tiene el **puerto 7547 abierto**: si está cerrado, su cliente TR-069 no está corriendo.
+
+```bash
+# desde el ACS, contra la IP del CPE
+timeout 3 bash -c "echo > /dev/tcp/<ip-del-cpe>/7547" && echo "cliente TR-069 activo" || echo "TR-069 apagado en el equipo"
+```
+
+Un aviso de RouterOS 6: si te apoyas en un matcher, no aplicará nada y **no avisará de nada**. Asigna el conjunto directamente al servidor o a la red.
+
 ## Cómo llegan los CPE al ACS
 
 La API solo puede gestionar un CPE **cuando este habla TR-069 con el ACS**. Para eso el CPE necesita:
 - TR-069 activado con la URL del ACS (`http://<acs>:7547/`), y
 - que el ACS sea **alcanzable** desde la red del CPE (IP pública/routable o ruteo interno).
 
-Autodescubrimiento por **DHCP Option 43** (si el CPE lo soporta): el servidor DHCP entrega la URL del ACS. Ojo: muchos equipos de consumo **no** lo soportan o no reactivan TR-069 tras un factory reset — en ese caso se requiere firmware OEM con el ACS pre-cargado o pre-aprovisionar el equipo.
+Autodescubrimiento por **DHCP Option 43** (si el CPE lo soporta): el servidor DHCP entrega la URL del ACS — los comandos exactos están arriba, en [Entregar el ACS por DHCP](#entregar-el-acs-por-dhcp-mikrotik). Ojo: muchos equipos de consumo **no** lo soportan o no reactivan TR-069 tras un factory reset — en ese caso se requiere firmware OEM con el ACS pre-cargado o pre-aprovisionar el equipo.
 
 Un `factory reset` del cliente borra la config y, si el firmware no trae TR-069 pre-activado, el equipo deja de reportar y la auto-restauración no puede actuar hasta que vuelva a hablar con el ACS.
 

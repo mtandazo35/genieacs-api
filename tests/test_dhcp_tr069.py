@@ -125,3 +125,32 @@ def test_los_valores_se_devuelven_para_poder_comprobarlos():
     r = generar(URL, [RED])
     assert r["valores"]["option43_tlv"].startswith("0x0117")
     assert r["valores"]["option43_plana"] == URL
+
+
+def test_la_documentacion_no_se_desincroniza_del_generador():
+    """El ejemplo de DEPLOY.md tiene que ser lo que el generador produce hoy.
+
+    Un hexadecimal copiado a mano se queda viejo en cuanto cambia el codigo, y
+    nadie lo nota hasta que alguien lo pega en un router y no funciona."""
+    from pathlib import Path
+
+    from app.dhcp_tr069 import generar
+
+    doc = (Path(__file__).resolve().parent.parent / "DEPLOY.md").read_text(encoding="utf-8")
+    script = generar("http://10.20.30.5:7547/",
+                     [{"cidr": "192.0.2.0/24", "gateway": "192.0.2.1",
+                       "pool_from": "192.0.2.10", "pool_to": "192.0.2.200"}],
+                     routeros="7", codificacion="ambas")["script"]
+    for linea in script.splitlines():
+        if linea.startswith(("add ", "set ")):
+            limpio = linea.split("   ;#")[0]
+            assert limpio in doc, f"DEPLOY.md no tiene esta linea del generador:\n  {limpio}"
+
+
+def test_la_documentacion_explica_el_limite_del_dhcp():
+    """Lo que mas confunde: si el CPE tiene el TR-069 apagado, el DHCP no ayuda."""
+    from pathlib import Path
+
+    doc = (Path(__file__).resolve().parent.parent / "DEPLOY.md").read_text(encoding="utf-8")
+    assert "7547" in doc and "modo AP" in doc
+    assert "no crea redes" in doc.lower() or "no crea ninguna red" in doc.lower()

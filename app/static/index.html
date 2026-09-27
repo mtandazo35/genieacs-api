@@ -471,6 +471,18 @@
         <form id="dhcp-form" class="card-form">
           <h3>Script para MikroTik</h3>
           <p class="muted small">Genera el script que entrega la URL del ACS por DHCP. El panel no se conecta al router: lo pegas tú, y el script trae su bloque para deshacerlo.</p>
+          <details class="ayuda">
+            <summary>Cómo funciona y qué comandos deja puestos</summary>
+            <p class="muted small">El CPE se anuncia en la <b>opción 60</b> como <code>dslforum.org</code> y el servidor le responde con la URL del ACS en la <b>opción 43</b>. Hay tres codificaciones porque el parque real no respeta el estándar por igual:</p>
+            <ul class="muted small">
+              <li><b>TLV</b>: subopción 1 + longitud + URL. Es lo que dice TR-069.</li>
+              <li><b>URL plana</b>: la URL tal cual, para equipos que no entienden el TLV.</li>
+              <li><b>Opción 125</b>: enterprise 3561, que piden algunos Huawei y ONT.</li>
+            </ul>
+            <p class="muted small">La opción 43 admite <b>un solo valor por cliente</b>. En RouterOS 7 el <i>matcher</i> por la opción 60 permite dar TLV a unos y plana a otros; en RouterOS 6 no hay matchers y hay que elegir una. El script <b>no crea redes</b>: asigna el conjunto a redes que ya existen.</p>
+            <p class="muted small">Para comprobarlo en el router: <code>/ip dhcp-server option print where name~"tr069-genieacs"</code> y <code>/ip dhcp-server lease print detail</code> (ahí se ve la opción 60 que anuncia cada CPE). El ejemplo completo está en DEPLOY.md.</p>
+            <p class="muted small"><b>Ojo:</b> la opción 43 solo dice <i>a dónde llamar</i> a un cliente TR-069 que ya esté corriendo. Si el equipo lo tiene apagado (típico en modo AP), ningún ajuste de DHCP lo levanta: hay que activarlo en su interfaz web. Señal rápida: si su puerto 7547 está cerrado, el cliente no está corriendo.</p>
+          </details>
           <label>URL del ACS<input id="dhcp-acs" placeholder="http://10.99.99.5:7547/"></label>
           <div class="row">
             <label>RouterOS

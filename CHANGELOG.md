@@ -4,6 +4,9 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [No publicado]
 
+### Añadido
+- **Documentación de los comandos de MikroTik para el DHCP** ([DEPLOY.md](DEPLOY.md#entregar-el-acs-por-dhcp-mikrotik)): ejemplo completo y pegable con las tres codificaciones, el matcher por , cómo comprobarlo, cómo deshacerlo, y por qué la opción 43 no sirve de nada si el CPE tiene el cliente TR-069 apagado. El mismo resumen está dentro del panel, plegable, en la pestaña DHCP. Una prueba compara el ejemplo con lo que genera el código: si cambia el generador y no la documentación, falla el CI.
+
 ### Cambiado
 - **El panel usa el ancho de la pantalla**: el contenido estaba encajonado en 1100 px y en un monitor ancho dejaba dos franjas vacías enormes. Ahora llega hasta 1760 px con márgenes laterales que crecen con la pantalla, las tarjetas de equipo y la ficha reparten más columnas cuando hay sitio, y en pantallas grandes caben dos formularios lado a lado. En móvil se mantiene el margen lateral y todo baja a una columna.
 - **Estilos del panel revisados**: jerarquía real de superficies (página < barras < tarjetas), tonos teñidos con el color de su significado en vez de grises planos (el aviso de árbol incompleto es ámbar, la zona peligrosa roja, los tags y la pestaña activa en el azul del panel), estados de hover/activo/deshabilitado en botones e inputs, **foco visible para navegación con teclado** (antes no había ninguno), tablas con cabecera diferenciada y fila resaltada al pasar, pestañas con subrayado en vez de caja, sombras coherentes, y adaptación a pantallas pequeñas (pestañas desplazables, ficha en una columna). Se respeta `prefers-reduced-motion`. No cambia ninguna clase ni identificador: solo el aspecto.
