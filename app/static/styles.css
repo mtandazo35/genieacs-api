@@ -347,3 +347,10 @@ main{width:100%;max-width:1760px;margin:0 auto;padding:1.5rem clamp(1rem,2.5vw,2
   *{animation-duration:.01ms !important;transition-duration:.01ms !important}
   .dev-card:hover{transform:none}
 }
+
+/* chips: opciones cortas que se eligen con un clic (modelos del proveedor de IA) */
+.chips{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.35rem}
+.chip{background:var(--bg2);color:var(--txt);border:1px solid var(--line);
+  border-radius:999px;padding:.2rem .7rem;cursor:pointer;
+  font-size:.78rem;font-family:ui-monospace,monospace}
+.chip:hover{border-color:var(--accent);color:var(--accent)}

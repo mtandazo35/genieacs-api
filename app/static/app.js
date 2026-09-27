@@ -1168,6 +1168,20 @@ $("#llm-clear").addEventListener("click", async () => {
   catch (err) { toast(err.message, "err"); }
 });
 
+// El proveedor dice que modelos tiene: se ofrecen en vez de tener que acertar el nombre
+function pintarModelos(modelos) {
+  const caja = $("#llm-modelos-vista"), chips = $("#llm-modelos-chips"), dl = $("#llm-modelos");
+  if (!modelos || !modelos.length) { caja.classList.add("hidden"); return; }
+  dl.innerHTML = modelos.map(m => `<option value="${esc(m)}">`).join("");
+  chips.innerHTML = modelos.map(m => `<button type="button" class="chip" data-modelo="${esc(m)}">${esc(m)}</button>`).join("");
+  caja.classList.remove("hidden");
+}
+
+$("#llm-modelos-chips").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-modelo]");
+  if (b) { $("#llm-model").value = b.dataset.modelo; toast("Modelo: " + b.dataset.modelo, "info"); }
+});
+
 $("#llm-test").addEventListener("click", async () => {
   const el = $("#llm-result");
   el.textContent = "Probando…"; el.style.color = "var(--muted)";
@@ -1178,6 +1192,8 @@ $("#llm-test").addEventListener("click", async () => {
       base_url: $("#llm-base").value.trim(), api_key: $("#llm-key").value.trim() || null } });
     // si la URL se corrigio sola, que se vea en el campo
     if (r.aviso) { toast(r.aviso, "info"); $("#llm-base").value = r.aviso.split(": ").pop(); }
+    pintarModelos(r.modelos);
+    if (r.ok && !$("#llm-model").value.trim()) $("#llm-model").value = r.modelo;
     if (r.ok) { el.textContent = `✓ Responde (${r.modelo} en ${r.proveedor})`; el.style.color = "var(--ok)"; }
     else { el.textContent = "✗ " + (r.error || "no responde"); el.style.color = "var(--err)"; }
   } catch (e) { el.textContent = "✗ " + e.message; el.style.color = "var(--err)"; }
