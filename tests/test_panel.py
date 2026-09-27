@@ -58,6 +58,21 @@ def test_las_llaves_del_css_estan_equilibradas():
     assert CSS.count("{") == CSS.count("}")
 
 
+def test_el_contenido_usa_el_ancho_de_la_pantalla():
+    """En un monitor ancho el panel dejaba dos franjas laterales vacias enormes."""
+    main = re.search(r"\nmain\{([^}]+)\}", CSS).group(1)
+    assert "width:100%" in main
+    tope = re.search(r"max-width:(\d+)px", main)
+    assert tope and int(tope.group(1)) >= 1600, "el contenido sigue encajonado"
+    assert "clamp(" in main, "el margen lateral deberia crecer con la pantalla"
+
+
+def test_en_movil_sigue_habiendo_margen_lateral():
+    """Ancho completo no puede significar texto pegado al borde del telefono."""
+    movil = re.search(r"@media \(max-width:640px\)\{([^@]+)", CSS).group(1)
+    assert "main{padding:1rem}" in movil.replace(" ", "")
+
+
 def test_el_foco_del_teclado_es_visible():
     """Sin esto, quien navega con Tab no sabe donde esta."""
     assert ":focus-visible" in CSS
