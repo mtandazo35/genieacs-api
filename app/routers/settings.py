@@ -33,22 +33,30 @@ class SettingsIn(BaseModel):
     default_connection_request: Optional[bool] = None
 
 
-# las consolas web de los proveedores no son endpoints de API: es el error
-# mas comun al configurarlo a mano
+# Pegar la URL de la consola web en vez de la del API es el error mas comun al
+# configurarlo a mano. Donde sabemos cual es la equivalente, se corrige sola; si
+# no la sabemos, se dice claro en vez de guardar algo que no va a funcionar.
 _CONSOLAS = ("console.", "dashboard.", "app.", "platform.")
+_EQUIVALENTE = {
+    "console.groq.com": "https://api.groq.com/openai/v1",
+    "platform.openai.com": "https://api.openai.com/v1",
+    "openrouter.ai": "https://openrouter.ai/api/v1",
+    "console.together.ai": "https://api.together.xyz/v1",
+}
 
 
-def _url_de_consola(url: str | None) -> str | None:
-    """Motivo por el que esa URL no puede ser la del API, o None."""
+def _normalizar_url(url: str | None) -> tuple[str | None, str | None, str | None]:
+    """(url a usar, aviso de correccion, error). Solo uno de los dos ultimos."""
     if not url:
-        return None
+        return url, None, None
     host = url.split("//", 1)[-1].split("/")[0].lower()
-    if host.startswith(_CONSOLAS):
-        sugerida = {"console.groq.com": "https://api.groq.com/openai/v1"}.get(host, "")
-        extra = f" Usa {sugerida}" if sugerida else " Usa la URL del API del proveedor"
-        return (f"{host} es la consola web del proveedor, no su API.{extra}, "
-                "o deja el campo vacio para la que trae por defecto.")
-    return None
+    buena = _EQUIVALENTE.get(host)
+    if buena and url.rstrip("/") != buena:
+        return buena, f"{host} es la consola web; se usa su API: {buena}", None
+    if host.startswith(_CONSOLAS) and not buena:
+        return url, None, (f"{host} parece la consola web del proveedor, no su API. "
+                           "Pon la URL del API o deja el campo vacio para la de por defecto.")
+    return url, None, None
 
 
 class LLMIn(BaseModel):
@@ -97,38 +105,42 @@ async def set_llm(body: LLMIn):
     """Guarda el proveedor de IA. Una clave vacia borra la guardada."""
     if body.base_url and not body.base_url.startswith(("http://", "https://")):
         raise HTTPException(400, "La URL del proveedor debe empezar por http:// o https://")
-    problema = _url_de_consola(body.base_url)
-    if problema:
-        raise HTTPException(400, problema)
+    base_url, aviso, error = _normalizar_url(body.base_url)
+    if error:
+        raise HTTPException(400, error)
     if body.provider is not None:
         db.set_setting(runtime.K_LLM_PROVIDER, body.provider)
     if body.model is not None:
         db.set_setting(runtime.K_LLM_MODEL, body.model.strip())
     if body.base_url is not None:
-        db.set_setting(runtime.K_LLM_BASE, body.base_url.strip().rstrip("/"))
+        db.set_setting(runtime.K_LLM_BASE, (base_url or "").strip().rstrip("/"))
     if body.api_key is not None:
         db.set_setting(runtime.K_LLM_KEY, body.api_key.strip())
     cfg = runtime.llm_config()
     return {"ok": True, "provider": cfg["provider"], "model": cfg["model"],
-            "key_set": bool(cfg["api_key"]), "source": cfg["source"]}
+            "base_url": cfg["base_url"], "key_set": bool(cfg["api_key"]),
+            "source": cfg["source"], "aviso": aviso}
 
 
 @router.post("/llm/test")
 async def test_llm(body: LLMIn | None = None):
     """Prueba la configuracion. Si se manda una en el cuerpo, se prueba ESA sin
     guardarla: si no, habria que guardar una clave para descubrir que no sirve."""
-    cfg = None
+    cfg, aviso_url = None, None
     if body and (body.api_key or body.base_url or body.model or body.provider):
         guardada = runtime.llm_config()
         cfg = {"provider": body.provider or guardada["provider"],
                "api_key": body.api_key or guardada["api_key"],
                "model": (body.model if body.model is not None else guardada["model"]),
                "base_url": (body.base_url if body.base_url is not None else guardada["base_url"])}
-        problema = _url_de_consola(cfg["base_url"])
-        if problema:
-            return {"ok": False, "error": problema}
+        cfg["base_url"], aviso_url, error = _normalizar_url(cfg["base_url"])
+        if error:
+            return {"ok": False, "error": error}
     try:
-        return await llm.probar(cfg)
+        res = await llm.probar(cfg)
+        if cfg and aviso_url:
+            res["aviso"] = aviso_url
+        return res
     except llm.LLMNoConfigurado as e:
         return {"ok": False, "error": str(e)}
     except Exception as e:

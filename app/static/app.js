@@ -1138,6 +1138,8 @@ async function loadLlm() {
     $("#llm-provider").value = c.provider || "groq";
     $("#llm-model").value = c.model || "";
     $("#llm-base").value = c.base_url || "";
+    $("#llm-base").placeholder = c.provider === "groq" ? "vacío = https://api.groq.com/openai/v1"
+                                                       : "vacío = la del proveedor elegido";
     $("#llm-key").value = "";
     $("#llm-state").textContent = c.key_set
       ? `Clave configurada (origen: ${c.source}). Por seguridad no se muestra; escribe una nueva para reemplazarla.`
@@ -1152,7 +1154,11 @@ $("#llm-form").addEventListener("submit", async (e) => {
                  base_url: $("#llm-base").value.trim() };
   const k = $("#llm-key").value.trim();
   if (k) body.api_key = k;
-  try { await api("/settings/llm", { method: "PUT", body }); toast("✓ Guardado", "ok"); loadLlm(); }
+  try {
+    const r = await api("/settings/llm", { method: "PUT", body });
+    toast(r.aviso ? "✓ Guardado. " + r.aviso : "✓ Guardado", "ok");
+    loadLlm();
+  }
   catch (err) { toast(err.message, "err"); }
 });
 
@@ -1170,6 +1176,8 @@ $("#llm-test").addEventListener("click", async () => {
     const r = await api("/settings/llm/test", { method: "POST", body: {
       provider: $("#llm-provider").value, model: $("#llm-model").value.trim(),
       base_url: $("#llm-base").value.trim(), api_key: $("#llm-key").value.trim() || null } });
+    // si la URL se corrigio sola, que se vea en el campo
+    if (r.aviso) { toast(r.aviso, "info"); $("#llm-base").value = r.aviso.split(": ").pop(); }
     if (r.ok) { el.textContent = `✓ Responde (${r.modelo} en ${r.proveedor})`; el.style.color = "var(--ok)"; }
     else { el.textContent = "✗ " + (r.error || "no responde"); el.style.color = "var(--err)"; }
   } catch (e) { el.textContent = "✗ " + e.message; el.style.color = "var(--err)"; }

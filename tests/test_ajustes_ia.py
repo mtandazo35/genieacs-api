@@ -121,17 +121,38 @@ def test_probar_sin_cuerpo_sigue_usando_la_guardada(client, admin_h, guardada, m
     assert client.post("/settings/llm/test", headers=admin_h).json()["ok"] is True
 
 
-def test_la_url_de_la_consola_se_rechaza_con_la_buena(client, admin_h):
-    """console.groq.com es la web del proveedor, no su API: error comun al configurarlo."""
+def test_la_url_de_la_consola_se_corrige_sola(client, admin_h):
+    """console.groq.com es la web del proveedor, no su API. Como sabemos cual es
+    la equivalente, se cambia sola en vez de dejar al usuario atascado."""
     r = client.put("/settings/llm", headers=admin_h,
-                   json={"base_url": "https://console.groq.com"})
-    assert r.status_code == 400
-    detalle = r.json()["detail"]
-    assert "consola web" in detalle and "api.groq.com/openai/v1" in detalle
-    # tampoco cuela al probar
+                   json={"base_url": "https://console.groq.com/keys"})
+    assert r.status_code == 200
+    assert "api.groq.com/openai/v1" in r.json()["aviso"]
+    guardada = client.get("/settings/llm", headers=admin_h).json()["base_url"]
+    assert guardada == "https://api.groq.com/openai/v1"
+
+
+def test_al_probar_tambien_se_corrige_y_se_avisa(client, admin_h, monkeypatch):
+    destinos = []
+
+    def handler(req):
+        destinos.append(str(req.url))
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+    real = httpx.AsyncClient
+    monkeypatch.setattr("app.llm.httpx.AsyncClient",
+                        lambda **kw: real(transport=httpx.MockTransport(handler), **kw))
     r = client.post("/settings/llm/test", headers=admin_h,
                     json={"api_key": "x", "base_url": "https://console.groq.com"}).json()
-    assert r["ok"] is False and "consola web" in r["error"]
+    assert r["ok"] is True and "api.groq.com/openai/v1" in r["aviso"]
+    assert destinos == ["https://api.groq.com/openai/v1/chat/completions"]
+
+
+def test_una_consola_que_no_sabemos_traducir_se_rechaza(client, admin_h):
+    """Sin equivalencia conocida, mejor decirlo que guardar algo que no funciona."""
+    r = client.put("/settings/llm", headers=admin_h,
+                   json={"base_url": "https://console.proveedor-raro.example"})
+    assert r.status_code == 400 and "consola web" in r.json()["detail"]
 
 
 def test_la_url_correcta_del_api_si_se_acepta(client, admin_h):
