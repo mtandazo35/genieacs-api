@@ -835,7 +835,8 @@ $("#user-form").addEventListener("submit", async (e) => {
   };
   try {
     await api("/auth/users", { method: "POST", body });
-    toast("✓ Usuario creado", "ok"); $("#user-form").reset(); loadUsers();
+    toast("✓ Usuario creado", "ok"); $("#user-form").reset();
+    cerrarModal($("#user-modal")); loadUsers();
   } catch (err) { toast(err.message, "err"); }
 });
 
@@ -1024,6 +1025,33 @@ function activarTab(nombre) {
 
 
 
+
+// ---- Modales de alta (usuarios, rangos) ----
+// <dialog> nativo: Esc cierra y el foco queda atrapado sin programar nada.
+function abrirModal(sel) {
+  const d = $(sel);
+  if (d && typeof d.showModal === "function") d.showModal();
+  const primero = d && d.querySelector("input:not([type=hidden])");
+  if (primero) primero.focus();
+}
+
+function cerrarModal(d) {
+  if (d && d.open) d.close();
+}
+
+document.addEventListener("click", (e) => {
+  const abrir = e.target.closest("#user-new") ? "#user-modal"
+              : e.target.closest("#rule-new") ? "#rule-modal" : null;
+  if (abrir) { e.preventDefault(); abrirModal(abrir); return; }
+  const cerrar = e.target.closest("[data-close]");
+  if (cerrar) { e.preventDefault(); cerrarModal(cerrar.closest("dialog")); }
+});
+
+// clic fuera del contenido (sobre el fondo oscuro) tambien cierra
+$$("dialog.modal").forEach(d => d.addEventListener("click", (e) => {
+  if (e.target === d) cerrarModal(d);
+}));
+
 // ---- Ajustes: subpestañas (Mi cuenta, Tema, y lo de admin) ----
 function ajustesSub(sub) {
   $$("#settings-tabs .subtab").forEach(b => b.classList.toggle("active", b.dataset.ssub === sub));
@@ -1154,7 +1182,8 @@ $("#disc-rule-form").addEventListener("submit", async (e) => {
     await api("/discovery/rules", { method: "POST", body: {
       cidr: $("#disc-cidr").value.trim(), isp_tag: $("#disc-tag").value.trim(),
       comment: $("#disc-comment").value.trim() || null } });
-    $("#disc-rule-form").reset(); toast("✓ Rango añadido", "ok"); loadDescubrimiento();
+    $("#disc-rule-form").reset(); cerrarModal($("#rule-modal"));
+    toast("✓ Rango añadido", "ok"); loadDescubrimiento();
   } catch (err) { toast(err.message, "err"); }
 });
 
@@ -1186,21 +1215,27 @@ $("#disc-save-mode").addEventListener("click", async () => {
 async function loadPerfiles() {
   try {
     const [perfiles, ia] = await Promise.all([api("/profiles"), api("/homologacion/estado")]);
-    $("#prof-list").innerHTML = perfiles.length ? perfiles.map(p => {
-      const pr = p.profile || {}, ev = pr.evidencia || {};
-      const filas = Object.entries(ev).filter(([k]) => k !== "wan_gateway_path")
-        .map(([k, v]) => `<tr><td>${esc(k)}</td><td class="muted small">${esc(v)}</td></tr>`).join("");
+    if (!perfiles.length) {
+      $("#prof-list").innerHTML = `<p class="muted">Aún no se ha aprendido ningún perfil: abre la ficha de un equipo.</p>`;
+      return;
+    }
+    // etiquetas legibles para lo que el perfil deduce
+    const NOMBRE = { wan: "WAN", lan: "LAN", wifi_2g: "WiFi 2.4 GHz", wifi_5g: "WiFi 5 GHz" };
+    $("#prof-list").innerHTML = `<div class="prof-grid">` + perfiles.map(p => {
+      const ev = (p.profile || {}).evidencia || {};
+      const deducciones = Object.entries(ev).filter(([k]) => k !== "wan_gateway_path")
+        .map(([k, v]) => `<div><dt>${esc(NOMBRE[k] || k)}</dt><dd class="muted">${esc(v)}</dd></div>`).join("");
       const over = Object.entries(p.overrides || {})
-        .map(([c, ruta]) => `<tr><td>${esc(c)}</td><td><code>${esc(ruta)}</code>
-            <button class="ghost small" data-unset="${escAttr(p.key)}" data-c="${escAttr(c)}">Quitar</button></td></tr>`).join("");
-      return `<div class="card-form">
+        .map(([c, ruta]) => `<div><dt>${esc(c)}</dt><dd><code>${esc(ruta)}</code>
+            <button class="ghost small" data-unset="${escAttr(p.key)}" data-c="${escAttr(c)}">Quitar</button></dd></div>`).join("");
+      return `<article class="prof-card">
         <h3>${esc(p.manufacturer || "?")} ${esc(p.model || "?")}</h3>
-        <p class="muted small">Firmware ${esc(p.firmware || "?")} · ${p.devices ?? "?"} equipo(s) · actualizado ${fmtDate(p.updated_at)}</p>
-        <table class="tbl"><tbody>${filas || `<tr><td class="muted">Sin deducciones todavía (falta refrescar el árbol de algún equipo).</td></tr>`}</tbody></table>
-        ${over ? `<h4>Correcciones manuales</h4><table class="tbl"><tbody>${over}</tbody></table>` : ""}
+        <p class="muted small">FW ${esc(p.firmware || "?")} · ${p.devices ?? "?"} equipo(s) · ${fmtDate(p.updated_at)}</p>
+        <dl class="prof-dl">${deducciones || `<div><dd class="muted">Sin deducciones todavía: falta refrescar el árbol de algún equipo de este modelo.</dd></div>`}</dl>
+        ${over ? `<dl class="prof-dl prof-over"><div><dt>Correcciones</dt><dd></dd></div>${over}</dl>` : ""}
         ${ia.disponible ? `<button class="ghost small" data-ia="${escAttr(p.key)}">Proponer mapeo con IA</button>` : ""}
-      </div>`;
-    }).join("") : `<p class="muted">Aún no se ha aprendido ningún perfil: abre la ficha de un equipo.</p>`;
+      </article>`;
+    }).join("") + `</div>`;
   } catch (e) { toast(e.message, "err"); }
 }
 

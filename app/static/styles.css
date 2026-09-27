@@ -276,6 +276,37 @@ main{width:100%;max-width:1760px;margin:0 auto;padding:1.5rem clamp(1rem,2.5vw,2
 .tema .sw i{width:11px;height:17px;border-radius:3px;display:block;border:1px solid rgba(0,0,0,.25)}
 .tema small{display:block;color:var(--muted);font-weight:400;font-size:.75rem}
 
+/* ---------- modales ----------
+   Los formularios de alta viven aqui: ocupaban pantalla permanentemente para
+   algo que se usa de vez en cuando. <dialog> nativo: cierra con Esc y atrapa
+   el foco sin que haya que programarlo. */
+.modal{border:1px solid var(--line);border-radius:var(--radius);background:var(--card);
+  color:var(--txt);padding:0;width:min(560px,calc(100vw - 2rem));box-shadow:var(--shadow-lg)}
+.modal::backdrop{background:rgba(2,6,15,.6)}
+.modal form{padding:1.2rem 1.3rem 1.3rem;display:grid;gap:.2rem}
+.modal-head{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:.9rem}
+.modal-head h3{margin:0;font-size:1.05rem}
+.modal-foot{display:flex;justify-content:flex-end;gap:.6rem;margin-top:1rem;
+  padding-top:1rem;border-top:1px solid var(--line-soft)}
+.modal p.muted{margin:0 0 .8rem}
+
+/* catalogo de perfiles: rejilla de tarjetas compactas, no una tarjeta por pantalla */
+.prof-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(clamp(320px,26vw,420px),1fr));
+  gap:1rem;margin-bottom:1.5rem;align-items:start}
+.prof-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  padding:.9rem 1.1rem 1rem;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:.55rem}
+.prof-card h3{margin:0;font-size:.98rem}
+.prof-card > p{margin:0}
+.prof-card > button{align-self:flex-start;margin-top:.2rem}
+.prof-dl{margin:0;display:grid;gap:.3rem}
+.prof-dl > div{display:grid;grid-template-columns:5.6rem 1fr;gap:.7rem;align-items:baseline;
+  font-size:.83rem;padding:.3rem 0;border-top:1px solid var(--line-soft)}
+.prof-dl > div:first-child{border-top:0}
+.prof-dl dt{font-weight:600}
+.prof-dl dd{margin:0;word-break:break-word}
+.prof-over{margin-top:.2rem;border-top:1px solid var(--line);padding-top:.4rem}
+.prof-over dt{color:var(--accent)}
+
 /* el generador de DHCP: formulario ancho y script a continuacion */
 #dhcp-form{max-width:none}
 #dhcp-script{margin-top:1rem;padding:1rem;font-size:.82rem;line-height:1.5;

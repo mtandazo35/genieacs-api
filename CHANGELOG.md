@@ -5,6 +5,8 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 ## [No publicado]
 
 ### Cambiado
+- **Altas en un modal, no en un formulario permanente**: crear usuario y añadir rango por ISP se abren ahora con un botón en la cabecera. Ocupaban pantalla siempre para algo que se usa de vez en cuando. Se usa el `<dialog>` nativo, así que cerrar con Esc, el foco atrapado dentro y el fondo oscurecido vienen de serie; también cierra pulsando fuera, y al guardar se cierra solo para que no parezca que no se guardó.
+- **Catálogo de perfiles en rejilla**: cada modelo era una tarjeta a lo ancho de la pantalla para mostrar dos líneas. Ahora van varias por fila, compactas, con las deducciones como pares etiqueta/valor en vez de una tabla dentro de la tarjeta.
 - **Ajustes reorganizado en subpestañas** (Mi cuenta, Tema, Conexión al ACS e Inteligencia artificial) y accesible para **cualquier rol**: *Mi cuenta* deja de ser una entrada suelta del menú y vive ahí dentro, mientras que lo que toca servidores queda reservado al admin. Quien tuviera guardada la vista antigua aterriza en Ajustes en vez de en una página que ya no existe.
 - **Tablas revisadas**: cabecera fija al desplazar, filas alternas, columna de acciones pegada a la derecha, cifras alineadas y cada tabla dentro de un contenedor que se desplaza en horizontal en vez de romper la página en pantallas pequeñas.
 - **Aprovisionamiento aprovecha el ancho**: en *Equipos nuevos* los formularios de modo y de rangos van en dos columnas cuando hay sitio, y el generador de DHCP deja de estar encajonado en media pantalla.
