@@ -287,8 +287,14 @@
 
     <!-- Usuarios (solo admin) -->
     <section id="users-page" class="hidden">
-      <div class="page-head"><h2>Usuarios</h2></div>
-      <form id="user-form" class="card-form">
+      <div class="page-head"><h2>Usuarios</h2>
+        <button id="user-new" class="ghost">+ Nuevo usuario</button>
+      </div>
+      <dialog id="user-modal" class="modal">
+        <form id="user-form" method="dialog">
+          <div class="modal-head"><h3>Nuevo usuario</h3>
+            <button type="button" class="ghost small" data-close>Cerrar</button>
+          </div>
         <div class="row">
           <label>Usuario<input id="u-name" required></label>
           <label>Contraseña<input id="u-pass" type="password" minlength="12" maxlength="128" autocomplete="new-password" required></label>
@@ -299,8 +305,12 @@
           </label>
           <label>Tag del ISP<input id="u-tag" placeholder="p.ej. altala (obligatorio si rol=ISP)"></label>
         </div>
-        <button type="submit">Crear usuario</button>
-      </form>
+          <div class="modal-foot">
+            <button type="button" class="ghost" data-close>Cancelar</button>
+            <button type="submit">Crear usuario</button>
+          </div>
+        </form>
+      </dialog>
       <div class="tbl-wrap">
         <table class="tbl" id="users-table"><thead><tr><th>#</th><th>Usuario</th><th>Rol</th><th>ISP</th><th>Activo</th><th>Acciones</th></tr></thead><tbody></tbody></table>
         </div>
@@ -441,19 +451,28 @@
           </div>
           <button type="button" id="disc-save-mode">Guardar modo</button>
         </div>
-        <form id="disc-rule-form" class="card-form">
-          <h3>Rangos por ISP</h3>
-          <p class="muted small">La IP desde la que informa el equipo decide de quién es. Gana el rango más específico; si dos ISP reclaman el mismo, no se asigna.</p>
-          <div class="row">
-            <label>Rango (CIDR)<input id="disc-cidr" placeholder="100.125.125.0/24" required></label>
-            <label>Tag del ISP<input id="disc-tag" placeholder="ISP-A" required></label>
-          </div>
-          <label>Comentario<input id="disc-comment" placeholder="opcional"></label>
-          <button type="submit">Añadir rango</button>
-        </form>
         </div>
 
-        <div class="page-head"><h3>Rangos configurados</h3></div>
+        <div class="page-head"><h3>Rangos por ISP</h3>
+          <button id="rule-new" class="ghost small">+ Añadir rango</button>
+        </div>
+        <dialog id="rule-modal" class="modal">
+          <form id="disc-rule-form" method="dialog">
+            <div class="modal-head"><h3>Nuevo rango</h3>
+              <button type="button" class="ghost small" data-close>Cerrar</button>
+            </div>
+            <p class="muted small">La IP desde la que informa el equipo decide de quién es. Gana el rango más específico; si dos ISP reclaman el mismo, no se asigna.</p>
+            <div class="row">
+              <label>Rango (CIDR)<input id="disc-cidr" placeholder="100.125.125.0/24" required></label>
+              <label>Tag del ISP<input id="disc-tag" placeholder="ISP-A" required></label>
+            </div>
+            <label>Comentario<input id="disc-comment" placeholder="opcional"></label>
+            <div class="modal-foot">
+              <button type="button" class="ghost" data-close>Cancelar</button>
+              <button type="submit">Añadir rango</button>
+            </div>
+          </form>
+        </dialog>
         <div class="tbl-wrap">
           <table class="tbl" id="disc-rules"><tbody></tbody></table>
         </div>
