@@ -214,6 +214,53 @@ main{width:100%;max-width:1760px;margin:0 auto;padding:1.5rem clamp(1rem,2.5vw,2
 
 .pager{display:flex;gap:.8rem;align-items:center;justify-content:center;margin-top:1rem}
 
+
+/* ---------- temas ----------
+   Cada tema redefine EL MISMO juego de tokens que :root. Si a uno le faltara
+   alguno heredaria el del tema por defecto y saldria un color fuera de sitio,
+   asi que hay una prueba que lo comprueba. */
+[data-theme="templada"]{
+  --bg:#101617; --bg2:#182122; --card:#1f2a2b; --card-hi:#273435;
+  --line:#35474a; --line-soft:#2b3b3d; --txt:#e8f0ef; --muted:#9bb0ae;
+  --accent:#5eead4; --accent2:#2dd4bf; --accent-ink:#07312c;
+  --accent-weak:rgba(94,234,212,.13); --ring:rgba(94,234,212,.45);
+  --ok:#4ade80; --ok-ink:#052e16; --ok-weak:rgba(74,222,128,.13);
+  --warn:#fbbf24; --warn-ink:#3a2606; --warn-weak:rgba(251,191,36,.15);
+  --err:#f87171; --err-ink:#450a0a; --err-weak:rgba(248,113,113,.14);
+}
+[data-theme="noche"]{
+  --bg:#0a0f1d; --bg2:#121a2e; --card:#18223a; --card-hi:#202c48;
+  --line:#2f3d5e; --line-soft:#273450; --txt:#e6eaf7; --muted:#97a3c2;
+  --accent:#a5b4fc; --accent2:#818cf8; --accent-ink:#141b3d;
+  --accent-weak:rgba(129,140,248,.16); --ring:rgba(165,180,252,.5);
+  --ok:#34d399; --ok-ink:#052e16; --ok-weak:rgba(52,211,153,.13);
+  --warn:#fbbf24; --warn-ink:#3a2606; --warn-weak:rgba(251,191,36,.15);
+  --err:#fb7185; --err-ink:#4c0519; --err-weak:rgba(251,113,133,.14);
+}
+[data-theme="claro"]{
+  color-scheme:light;
+  --bg:#f5f7fa; --bg2:#ffffff; --card:#ffffff; --card-hi:#eef2f7;
+  --line:#d3dbe5; --line-soft:#e2e8f0; --txt:#14202e; --muted:#5b6b7f;
+  --accent:#0369a1; --accent2:#0284c7; --accent-ink:#ffffff;
+  --accent-weak:rgba(2,132,199,.10); --ring:rgba(2,132,199,.4);
+  --ok:#15803d; --ok-ink:#ffffff; --ok-weak:rgba(21,128,61,.10);
+  --warn:#b45309; --warn-ink:#ffffff; --warn-weak:rgba(180,83,9,.10);
+  --err:#b91c1c; --err-ink:#ffffff; --err-weak:rgba(185,28,28,.10);
+  --shadow:0 1px 2px rgba(15,32,46,.08); --shadow-lg:0 18px 45px rgba(15,32,46,.14);
+}
+[data-theme="claro"] .login-wrap{background:radial-gradient(1200px 500px at 50% -10%,rgba(2,132,199,.10),transparent 60%)}
+
+/* selector de temas (Ajustes) */
+.temas{display:flex;gap:.7rem;flex-wrap:wrap;margin:.3rem 0 1rem}
+.tema{display:flex;align-items:center;gap:.6rem;background:var(--bg2);color:var(--txt);
+  border:1px solid var(--line);border-radius:10px;padding:.55rem .8rem;font-size:.9rem;
+  font-weight:500;box-shadow:none}
+.tema:hover{border-color:var(--accent)}
+.tema[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-weak);font-weight:600}
+.tema .sw{display:flex;gap:3px}
+.tema .sw i{width:11px;height:17px;border-radius:3px;display:block;border:1px solid rgba(0,0,0,.25)}
+.tema small{display:block;color:var(--muted);font-weight:400;font-size:.75rem}
+
 /* bloque de ayuda plegable dentro de un formulario */
 .ayuda{border:1px solid var(--line-soft);border-radius:var(--radius-sm);
   padding:.6rem .8rem;margin-bottom:1rem;background:var(--bg2)}

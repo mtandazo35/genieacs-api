@@ -530,6 +530,30 @@
         <div id="set-testresult" class="small"></div>
       </form>
 
+
+      <div class="page-head" style="margin-top:2rem"><h2>Tema</h2></div>
+      <div class="card-form">
+        <p class="muted small">El color del panel. Se guarda en este navegador, así que cada persona puede tener el suyo.</p>
+        <div class="temas" id="temas" role="group" aria-label="Elegir tema">
+          <button type="button" class="tema" data-tema="" aria-pressed="true">
+            <span class="sw"><i style="background:#0f172a"></i><i style="background:#1e293b"></i><i style="background:#38bdf8"></i></span>
+            <span>Pizarra<small>el de siempre</small></span>
+          </button>
+          <button type="button" class="tema" data-tema="templada" aria-pressed="false">
+            <span class="sw"><i style="background:#101617"></i><i style="background:#1f2a2b"></i><i style="background:#5eead4"></i></span>
+            <span>Templada<small>gris verdoso</small></span>
+          </button>
+          <button type="button" class="tema" data-tema="noche" aria-pressed="false">
+            <span class="sw"><i style="background:#0a0f1d"></i><i style="background:#18223a"></i><i style="background:#a5b4fc"></i></span>
+            <span>Noche<small>azul marino</small></span>
+          </button>
+          <button type="button" class="tema" data-tema="claro" aria-pressed="false">
+            <span class="sw"><i style="background:#f5f7fa"></i><i style="background:#ffffff"></i><i style="background:#0284c7"></i></span>
+            <span>Claro<small>para oficina</small></span>
+          </button>
+        </div>
+      </div>
+
       <div class="page-head" style="margin-top:2rem"><h2>Inteligencia artificial</h2></div>
       <form id="llm-form" class="card-form">
         <p class="muted small">Se usa solo para <b>proponer el mapeo</b> de modelos de CPE que las reglas automáticas no resuelven (Aprovisionamiento → Perfiles). Al proveedor se le envían <b>rutas de parámetros, nunca valores</b>: no salen SSID, claves ni IPs de abonados. Nada se aplica sin que tú lo confirmes.</p>

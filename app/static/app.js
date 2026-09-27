@@ -1024,6 +1024,29 @@ function activarTab(nombre) {
   if (t && !t.disabled) t.click();
 }
 
+
+// ---- Tema del panel (se guarda en este navegador) ----
+function aplicarTema(tema) {
+  if (tema) document.documentElement.setAttribute("data-theme", tema);
+  else document.documentElement.removeAttribute("data-theme");
+  $$("#temas .tema").forEach(b => b.setAttribute("aria-pressed", String((b.dataset.tema || "") === (tema || ""))));
+}
+
+function temaGuardado() {
+  try { return localStorage.getItem("tema") || ""; } catch { return ""; }
+}
+
+$("#temas").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-tema]");
+  if (!b) return;
+  const tema = b.dataset.tema || "";
+  try { tema ? localStorage.setItem("tema", tema) : localStorage.removeItem("tema"); } catch { /* modo privado */ }
+  aplicarTema(tema);
+});
+
+// se aplica antes de que se vea nada, no solo al abrir Ajustes
+aplicarTema(temaGuardado());
+
 // ---- Ajustes: proveedor de IA ----
 async function loadLlm() {
   try {

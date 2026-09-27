@@ -245,6 +245,10 @@ Limitaciones actuales por modelo de datos:
 - **WAN DHCP/estático y PPPoE**: TR-098 y TR-181.
 - **Acceso remoto**: TR-098 (Enable+Port) y TR-181 (Enable+Port+Protocol, el TP-Link exige también los `X_TP_*`). Un solo servicio remoto por equipo (no puertos HTTP/HTTPS separados si el firmware no los expone).
 
+## Panel: temas
+
+En **Ajustes → Tema** se elige entre cuatro paletas: *Pizarra* (la de siempre), *Templada*, *Noche* y *Claro*. La elección se guarda en el navegador de cada persona, no en el servidor, y se aplica nada más cargar el panel.
+
 ## Panel: página de Aprovisionamiento (admin)
 
 Una página con tres pestañas, que son la cara visible de todo lo anterior:
