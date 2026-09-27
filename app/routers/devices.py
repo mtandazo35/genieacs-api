@@ -11,7 +11,7 @@ from ..deps import CurrentUser, authorized_device, current_user, tenant_query
 from ..genieacs import genie
 from ..parammap import pick_map, resolve
 from .. import catalog
-from ..treeprofile import coverage, effective_params
+from ..treeprofile import capabilities, coverage, effective_params
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
@@ -358,6 +358,9 @@ async def device_status(device_id: str, dev=Depends(authorized_device)):
     model_key, perfil = catalog.recordar(full)
     result["profile"] = {**perfil, "key": model_key}
     eff = effective_params(pmap, full, catalog.overrides(model_key))
+    # que sabe hacer este modelo: el panel esconde lo que no soporta en vez de
+    # ofrecer formularios que fallarian al pulsar
+    result["capabilities"] = capabilities(full, pmap)
     for k in _STATUS_KEYS:
         r = eff.get(k) or resolve(pmap, k)
         if r:

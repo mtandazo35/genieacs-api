@@ -196,6 +196,7 @@ function renderStatus(st) {
   const tree = st.tree || {};
   $("#dev-tree-msg").textContent = tree.hint || "";
   $("#dev-tree").classList.toggle("hidden", !tree.hint);
+  aplicarCapacidades(st.capabilities);
   const dhcp = (st.dhcp_min || st.dhcp_max) ? `${st.dhcp_min || "?"} – ${st.dhcp_max || "?"}` : null;
   const sections = [
     ["Dispositivo", [
@@ -975,6 +976,53 @@ document.addEventListener("click", async (e) => {
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function escAttr(s) { return esc(s); }
 
+
+
+// ---- Capacidades: el panel se adapta a lo que cada modelo expone ----
+// Cada pestaña depende de una o varias funciones del equipo. Si el equipo NO las
+// tiene, la pestaña se deshabilita (no se esconde: así se ve que existe y por qué
+// no está disponible). Si aún no se sabe porque falta refrescar el árbol, se deja.
+const TAB_REQUIERE = {
+  wifi: ["wifi_2g", "wifi_5g"],
+  net: ["lan", "dhcp"],
+  wan: ["wan_dhcp", "wan_estatica", "wan_pppoe"],
+  ipv6: ["ipv6"],
+  dns: ["dns"],
+  access: ["acceso_remoto", "usuario_admin"],
+  time: ["hora"],
+  clients: ["clientes_lan"],
+  diag: ["diag_ping", "diag_trace"],
+};
+
+function aplicarCapacidades(caps) {
+  if (!caps) return;
+  $$(".tab").forEach(t => {
+    const req = TAB_REQUIERE[t.dataset.tab];
+    t.disabled = false;
+    t.title = "";
+    if (!req) return;                                   // firmware, reinicio, respaldo…
+    const estados = req.map(f => (caps[f] || {}).estado).filter(Boolean);
+    if (!estados.length) return;
+    if (estados.some(e => e === "si")) return;          // con que soporte una, vale
+    if (estados.every(e => e === "no")) {
+      t.disabled = true;
+      t.title = "Este modelo no expone esta función en su árbol TR-069";
+      if (t.classList.contains("active")) { t.classList.remove("active"); activarTab("wifi"); }
+    } else {
+      t.title = "Aún no se sabe: pulsa Actualizar para que el equipo reporte su árbol";
+    }
+  });
+  const no = (caps._resumen || {}).no_soportadas || [];
+  $("#dev-caps").textContent = no.length
+    ? "Este modelo no expone: " + no.map(f => (caps[f] || {}).nombre || f).join(", ")
+    : "";
+  $("#dev-caps").classList.toggle("hidden", !no.length);
+}
+
+function activarTab(nombre) {
+  const t = $$(".tab").find(x => x.dataset.tab === nombre);
+  if (t && !t.disabled) t.click();
+}
 
 // ---- Ajustes: proveedor de IA ----
 async function loadLlm() {

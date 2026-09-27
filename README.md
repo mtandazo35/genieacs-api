@@ -77,7 +77,7 @@ El registro guarda **qué** se hizo (frase legible: "Acceso remoto ACTIVADO", "c
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET  | `/devices` | lista (id, name, customer, tags, modelo, firmware, último inform), filtrada por tenencia |
-| GET  | `/devices/{id}/status` | ficha de estado (dispositivo, WAN activa, LAN, WiFi con clientes, PPPoE con estado, MAC, name/customer), `tree` (cuántos parámetros tiene el ACS y si falta refrescar) y `profile` (qué instancia es la WAN, la LAN y cada radio, con la evidencia de por qué) |
+| GET  | `/devices/{id}/status` | ficha de estado (dispositivo, WAN activa, LAN, WiFi con clientes, PPPoE con estado, MAC, name/customer), `tree` (cuántos parámetros tiene el ACS y si falta refrescar), `profile` (qué instancia es la WAN, la LAN y cada radio, con su evidencia) y `capabilities` (qué funciones soporta ese modelo) |
 | POST | `/devices/{id}/read` | pide al CPE los parámetros de estado (getParameterValues) |
 | POST | `/devices/{id}/refresh?object=` | GetParameterNames de la raíz (o del `object` dado) |
 | POST | `/devices/read-bulk` | lectura masiva `{all\|tag\|model\|device_ids}` (respeta tenencia) |
@@ -221,6 +221,10 @@ curl -X PUT "$BASE/devices/$DEV/label" -H "$H" -H 'Content-Type: application/jso
 - **Nombre/cliente ≠ tags de GenieACS** (ver sección Identificación).
 
 ## Soporte de modelos (TR-098 y TR-181)
+
+**Capacidades por modelo**: de ese mismo árbol sale qué funciones tiene cada equipo (WiFi por banda, LAN, DHCP, WAN por DHCP/estática/PPPoE, DNS, hora, IPv6, acceso remoto, usuario del equipo, diagnósticos, lista de clientes). El panel **deshabilita las pestañas que ese modelo no expone**, en vez de ofrecer formularios que fallarían al pulsar, y lo dice bajo la cabecera de la ficha.
+
+Hay tres estados, y el tercero es el que evita mentir: **sí**, **no**, y **aún no se sabe** cuando el árbol está incompleto. Con el árbol a medias nunca se dice "no lo soporta". Reiniciar, restaurar de fábrica y enviar firmware no dependen del árbol: son órdenes TR-069 y las soporta cualquier CPE.
 
 **Perfil derivado del árbol** ([app/treeprofile.py](app/treeprofile.py)): antes de usar el mapa, el panel deduce del propio equipo qué instancia es cada cosa, y así no depende de que todos los modelos numeren igual:
 
