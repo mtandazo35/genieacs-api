@@ -143,7 +143,7 @@ Un CPE que no recibe la URL del ACS nunca aparece en el panel. Esta sección **g
 
 Tres codificaciones, porque el parque real no respeta el estándar por igual: **TLV** (TR-069 Anexo G: subopción 1 + longitud + URL), **URL plana** (equipos que no entienden TLV) y **opción 125** (enterprise 3561). La opción 43 solo admite un valor por cliente: en **RouterOS 7** un *matcher* por `dslforum.org` permite dar TLV a unos y plana a otros; en **v6** no hay matchers y hay que elegir.
 
-El script **no crea redes**: asigna el conjunto de opciones a redes que ya existen, para no tocar el DHCP de un ISP en producción.
+El script **no crea redes**: asigna el conjunto de opciones a redes que ya existen, para no tocar el DHCP de un ISP en producción. En [DEPLOY.md](DEPLOY.md#entregar-el-acs-por-dhcp-mikrotik) está el ejemplo completo de comandos, cómo comprobarlo y cómo deshacerlo.
 
 | Método | Ruta | Descripción |
 |---|---|---|

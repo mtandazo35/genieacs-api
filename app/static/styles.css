@@ -214,6 +214,14 @@ main{width:100%;max-width:1760px;margin:0 auto;padding:1.5rem clamp(1rem,2.5vw,2
 
 .pager{display:flex;gap:.8rem;align-items:center;justify-content:center;margin-top:1rem}
 
+/* bloque de ayuda plegable dentro de un formulario */
+.ayuda{border:1px solid var(--line-soft);border-radius:var(--radius-sm);
+  padding:.6rem .8rem;margin-bottom:1rem;background:var(--bg2)}
+.ayuda summary{cursor:pointer;font-size:.85rem;color:var(--accent);font-weight:600}
+.ayuda[open] summary{margin-bottom:.6rem}
+.ayuda p,.ayuda ul{margin:.4rem 0}
+.ayuda ul{padding-left:1.1rem}
+
 /* ---------- pantallas pequeñas ---------- */
 @media (max-width:640px){
   main{padding:1rem}
