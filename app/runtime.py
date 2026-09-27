@@ -10,6 +10,11 @@ from .config import get_settings
 K_NBI_URL = "nbi_url"
 K_NBI_TIMEOUT = "nbi_timeout"
 K_DEFAULT_CR = "default_connection_request"
+# proveedor de IA (homologacion asistida); la clave se guarda aqui, nunca se devuelve
+K_LLM_PROVIDER = "llm_provider"
+K_LLM_KEY = "llm_api_key"
+K_LLM_MODEL = "llm_model"
+K_LLM_BASE = "llm_base_url"
 
 
 def nbi_url() -> str:
@@ -26,6 +31,18 @@ def default_connection_request() -> bool:
     if v is None:
         return get_settings().default_connection_request
     return v.lower() == "true"
+
+
+def llm_config() -> dict:
+    """Proveedor de IA efectivo. La clave NO sale de aqui hacia la API."""
+    s = get_settings()
+    return {
+        "provider": db.get_setting(K_LLM_PROVIDER) or s.llm_provider,
+        "api_key": db.get_setting(K_LLM_KEY) or s.llm_api_key,
+        "model": db.get_setting(K_LLM_MODEL) or s.llm_model,
+        "base_url": db.get_setting(K_LLM_BASE) or s.llm_base_url,
+        "source": "panel" if db.get_setting(K_LLM_KEY) else ("env" if s.llm_api_key else "sin configurar"),
+    }
 
 
 def effective() -> dict:

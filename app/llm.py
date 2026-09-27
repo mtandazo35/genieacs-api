@@ -18,7 +18,7 @@ import logging
 
 import httpx
 
-from .config import get_settings
+from . import runtime
 
 log = logging.getLogger("genieacs_api.llm")
 
@@ -41,17 +41,33 @@ class LLMNoConfigurado(RuntimeError):
 
 
 def configurado() -> bool:
-    return bool(get_settings().llm_api_key)
+    return bool(runtime.llm_config()["api_key"])
 
 
 def _destino() -> tuple[str, str, str]:
-    s = get_settings()
-    if not s.llm_api_key:
+    """(base_url, modelo, clave) efectivos: lo del panel manda sobre el .env."""
+    cfg = runtime.llm_config()
+    if not cfg["api_key"]:
         raise LLMNoConfigurado(
-            "No hay proveedor de IA configurado: pon GENIEACS_API_LLM_API_KEY en el .env "
-            "(y opcionalmente LLM_PROVIDER y LLM_MODEL).")
-    base, modelo = PROVEEDORES.get(s.llm_provider, PROVEEDORES["groq"])
-    return (s.llm_base_url or base), (s.llm_model or modelo), s.llm_api_key
+            "No hay proveedor de IA configurado: ponlo en Ajustes > Inteligencia artificial "
+            "(o con GENIEACS_API_LLM_API_KEY en el .env).")
+    base, modelo = PROVEEDORES.get(cfg["provider"], PROVEEDORES["groq"])
+    return (cfg["base_url"] or base), (cfg["model"] or modelo), cfg["api_key"]
+
+
+async def probar() -> dict:
+    """Comprueba que la clave y el modelo funcionan, con la peticion mas barata."""
+    base, modelo, clave = _destino()
+    async with httpx.AsyncClient(timeout=30.0) as c:
+        r = await c.post(f"{base}/chat/completions",
+                         json={"model": modelo, "max_tokens": 1,
+                               "messages": [{"role": "user", "content": "ok"}]},
+                         headers={"Authorization": f"Bearer {clave}"})
+    if r.status_code == 200:
+        return {"ok": True, "modelo": modelo, "proveedor": base}
+    detalle = {401: "la clave no es valida", 404: "ese modelo no existe en el proveedor",
+               429: "limite de peticiones del proveedor"}.get(r.status_code, f"HTTP {r.status_code}")
+    return {"ok": False, "modelo": modelo, "proveedor": base, "error": detalle}
 
 
 def _prompt(conceptos: list[str], rutas: list[str], modelo_cpe: str) -> list[dict]:

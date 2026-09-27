@@ -158,10 +158,12 @@ Tres cosas la hacen segura:
 - Una ruta que el modelo se invente **se descarta**: solo se aceptan rutas que existen en el árbol de ese equipo.
 - **Nada se aplica solo**: la propuesta se muestra con el valor actual de cada ruta, y solo al confirmar se guarda como corrección del catálogo.
 
-Proveedor intercambiable en el `.env` (`LLM_PROVIDER`): **Groq** por defecto, y cualquier otro compatible con el API de OpenAI (OpenRouter, Together, vLLM local) con el mismo cliente. Como esos modelos tienen ventanas de contexto cortas, solo se mandan las rutas escribibles y las de estado, con un tope.
+Se configura **desde el panel** (Ajustes → Inteligencia artificial): proveedor, clave, modelo y URL. Lo guardado en el panel manda sobre el `.env`, y hay un botón **Probar** que hace la petición más barata posible para ver si la clave funciona. **La clave no se devuelve nunca** por la API (solo `key_set: true`) ni aparece en la auditoría. Proveedores: **Groq** por defecto, y cualquier otro compatible con el API de OpenAI (OpenRouter, Together, vLLM local) con el mismo cliente. Como esos modelos tienen ventanas de contexto cortas, solo se mandan las rutas escribibles y las de estado, con un tope.
 
 | Método | Ruta | Descripción |
 |---|---|---|
+| GET/PUT | `/settings/llm` | proveedor, modelo y clave (la clave solo se escribe, nunca se lee) |
+| POST | `/settings/llm/test` | comprueba que la clave y el modelo responden |
 | GET | `/homologacion/estado` | si hay proveedor configurado |
 | POST | `/homologacion/proponer` | `{device_id}` pide el mapeo de lo que falta (no aplica nada) |
 | POST | `/homologacion/confirmar` | `{key, concept, path}` guarda una sugerencia revisada |

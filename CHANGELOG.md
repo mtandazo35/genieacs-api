@@ -5,6 +5,7 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 ## [No publicado]
 
 ### Añadido
+- **Configuración de la IA desde el panel** (Ajustes → Inteligencia artificial): proveedor, clave, modelo y URL, sin tocar el `.env` por SSH, con botón de prueba que hace la petición más barata posible. Lo del panel manda sobre el `.env`. La clave se guarda para poder usarla, pero **no se devuelve nunca** por la API (solo `key_set`) ni se escribe en la auditoría; ambas fugas están cubiertas por pruebas.
 - **Página de Aprovisionamiento en el panel** (admin) con tres pestañas: equipos nuevos (bandeja, rangos por ISP y modo sugerencia/automático), perfiles de modelo (catálogo con evidencia, correcciones y propuesta por IA) y DHCP/Option 43. Reutiliza los estilos del panel; solo se añadió una regla de CSS.
 - **Generador del script DHCP (Option 43) para MikroTik**: codificación TLV, URL plana y opción 125, con matcher por `dslforum.org` en RouterOS 7 y aviso explícito de que v6 no lo soporta. El script asigna el conjunto a redes existentes (nunca las crea) y trae su bloque para deshacerse. `POST /provisioning/dhcp/script`.
 - Pruebas del panel que cruzan los `id` que usa el JavaScript con los del HTML: si no coinciden, el script muere al cargar y el panel entero deja de funcionar sin que ninguna prueba de la API lo note.

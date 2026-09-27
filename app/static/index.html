@@ -516,6 +516,31 @@
         </div>
         <div id="set-testresult" class="small"></div>
       </form>
+
+      <div class="page-head" style="margin-top:2rem"><h2>Inteligencia artificial</h2></div>
+      <form id="llm-form" class="card-form">
+        <p class="muted small">Se usa solo para <b>proponer el mapeo</b> de modelos de CPE que las reglas automáticas no resuelven (Aprovisionamiento → Perfiles). Al proveedor se le envían <b>rutas de parámetros, nunca valores</b>: no salen SSID, claves ni IPs de abonados. Nada se aplica sin que tú lo confirmes.</p>
+        <div class="row">
+          <label>Proveedor
+            <select id="llm-provider">
+              <option value="groq">Groq</option>
+              <option value="openai">OpenAI</option>
+              <option value="openrouter">OpenRouter</option>
+              <option value="local">Local (vLLM / compatible)</option>
+            </select>
+          </label>
+          <label>Modelo<input id="llm-model" placeholder="por defecto, el del proveedor"></label>
+        </div>
+        <label>Clave de API<input id="llm-key" type="password" autocomplete="off" placeholder="pegar aquí (no se vuelve a mostrar)"></label>
+        <label>URL del proveedor<input id="llm-base" placeholder="opcional; por defecto la del proveedor"></label>
+        <div id="llm-state" class="muted small"></div>
+        <div class="row">
+          <button type="button" id="llm-test" class="ghost">Probar</button>
+          <button type="submit">Guardar</button>
+          <button type="button" id="llm-clear" class="ghost small">Borrar clave</button>
+        </div>
+        <div id="llm-result" class="small"></div>
+      </form>
     </section>
   </main>
 </div>
