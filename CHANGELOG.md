@@ -4,6 +4,9 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [No publicado]
 
+### Cambiado
+- **Estilos del panel revisados**: jerarquía real de superficies (página < barras < tarjetas), tonos teñidos con el color de su significado en vez de grises planos (el aviso de árbol incompleto es ámbar, la zona peligrosa roja, los tags y la pestaña activa en el azul del panel), estados de hover/activo/deshabilitado en botones e inputs, **foco visible para navegación con teclado** (antes no había ninguno), tablas con cabecera diferenciada y fila resaltada al pasar, pestañas con subrayado en vez de caja, sombras coherentes, y adaptación a pantallas pequeñas (pestañas desplazables, ficha en una columna). Se respeta `prefers-reduced-motion`. No cambia ninguna clase ni identificador: solo el aspecto.
+
 ### Añadido
 - **Capacidades por modelo**: `/devices/{id}/status` devuelve `capabilities` con qué funciones expone ese equipo (WiFi por banda, LAN, DHCP, WAN DHCP/estática/PPPoE, DNS, hora, IPv6, acceso remoto, usuario del equipo, diagnósticos, clientes), con la ruta que sustenta cada una y si es escribible. El panel deshabilita las pestañas no soportadas —con el motivo en el tooltip— en vez de ofrecer formularios que fallarían. Tres estados: sí, no, y **aún no se sabe** mientras el árbol esté incompleto; con el árbol a medias nunca se afirma que algo no se soporta.
 - **Configuración de la IA desde el panel** (Ajustes → Inteligencia artificial): proveedor, clave, modelo y URL, sin tocar el `.env` por SSH, con botón de prueba que hace la petición más barata posible. Lo del panel manda sobre el `.env`. La clave se guarda para poder usarla, pero **no se devuelve nunca** por la API (solo `key_set`) ni se escribe en la auditoría; ambas fugas están cubiertas por pruebas.

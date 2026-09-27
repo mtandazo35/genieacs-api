@@ -44,6 +44,25 @@ def test_la_pagina_de_aprovisionamiento_es_solo_para_admin():
     assert '$("#nav-prov").classList.toggle("hidden", S.role !== "admin")' in JS
 
 
+CSS = (ESTATICOS / "styles.css").read_text(encoding="utf-8")
+
+
+def test_todas_las_variables_de_color_estan_definidas():
+    """Un var(--x) mal escrito no da error: el color simplemente no se aplica."""
+    definidas = set(re.findall(r"(--[a-z0-9-]+)\s*:", CSS))
+    usadas = set(re.findall(r"var\((--[a-z0-9-]+)", CSS))
+    assert not (usadas - definidas), f"variables usadas y no definidas: {sorted(usadas - definidas)}"
+
+
+def test_las_llaves_del_css_estan_equilibradas():
+    assert CSS.count("{") == CSS.count("}")
+
+
+def test_el_foco_del_teclado_es_visible():
+    """Sin esto, quien navega con Tab no sabe donde esta."""
+    assert ":focus-visible" in CSS
+
+
 @pytest.mark.parametrize("endpoint", [
     "/discovery", "/discovery/rules", "/discovery/assign", "/discovery/mode",
     "/profiles", "/homologacion/estado", "/homologacion/proponer",
