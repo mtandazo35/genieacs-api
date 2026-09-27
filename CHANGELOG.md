@@ -4,7 +4,11 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/).
 
 ## [No publicado]
 
+### Corregido
+- **Las subpestañas de una página escondían las de otra.** El manejador de Actualizaciones seleccionaba todas las subpestañas del panel, así que al pulsar una de Aprovisionamiento o de Ajustes, los paneles de Actualizaciones se ocultaban y esa página aparecía vacía hasta volver a pulsar una de sus pestañas. Cada grupo queda acotado a su propia página, y al entrar en cualquiera de ellas el panel de la pestaña activa ya se ve, sin pulsar nada.
+
 ### Cambiado
+- **Tarjetas estandarizadas**: equipos, perfiles de modelo y secciones de la ficha comparten ancho de columna y altura mínima (variables  y ), con el mismo relleno interior, para que las rejillas queden encajadas en vez de escalonadas. En pantallas pequeñas la altura vuelve a ser libre.
 - **Altas en un modal, no en un formulario permanente**: crear usuario y añadir rango por ISP se abren ahora con un botón en la cabecera. Ocupaban pantalla siempre para algo que se usa de vez en cuando. Se usa el `<dialog>` nativo, así que cerrar con Esc, el foco atrapado dentro y el fondo oscurecido vienen de serie; también cierra pulsando fuera, y al guardar se cierra solo para que no parezca que no se guardó.
 - **Catálogo de perfiles en rejilla**: cada modelo era una tarjeta a lo ancho de la pantalla para mostrar dos líneas. Ahora van varias por fila, compactas, con las deducciones como pares etiqueta/valor en vez de una tabla dentro de la tarjeta.
 - **Ajustes reorganizado en subpestañas** (Mi cuenta, Tema, Conexión al ACS e Inteligencia artificial) y accesible para **cualquier rol**: *Mi cuenta* deja de ser una entrada suelta del menú y vive ahí dentro, mientras que lo que toca servidores queda reservado al admin. Quien tuviera guardada la vista antigua aterriza en Ajustes en vez de en una página que ya no existe.

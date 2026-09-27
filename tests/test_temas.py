@@ -18,7 +18,8 @@ JS = (ESTATICOS / "app.js").read_text(encoding="utf-8")
 TEMAS = ["templada", "noche", "claro"]
 
 # tokens que definen la paleta; el resto (--radius, --sans...) no cambia por tema
-_NO_PALETA = ("--radius", "--radius-sm", "--shadow", "--shadow-lg")
+_NO_PALETA = ("--radius", "--radius-sm", "--shadow", "--shadow-lg",
+              "--tarjeta", "--tarjeta-alto")   # medidas, no colores
 
 
 def _bloque(selector: str) -> str:

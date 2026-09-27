@@ -883,6 +883,9 @@ $("#settings-form").addEventListener("submit", async (e) => {
 const fileKind = f => { const t=(f.metadata&&f.metadata.fileType)||f.fileType||""; return t.startsWith("3")?"config":t.startsWith("2")?"web":"firmware"; };
 
 async function loadUpdates() {
+  // al entrar, el panel de la subpestaña activa tiene que verse sin pulsar nada
+  const activa = $$("#updates-page .subtab").find(t => t.classList.contains("active"));
+  mostrarSubActualizaciones(activa ? activa.dataset.sub : "firmware");
   try {
     const files = await api("/firmware");
     const sz = f => f.length ? (f.length/1024/1024).toFixed(2)+" MB" : "-";
@@ -900,11 +903,18 @@ async function loadUpdates() {
   } catch (e) { toast(e.message, "err"); }
 }
 
-// sub-tabs Firmware / Respaldos
-$$(".subtab").forEach(t => t.addEventListener("click", () => {
-  $$(".subtab").forEach(x => x.classList.remove("active")); t.classList.add("active");
-  $$("[data-subpanel]").forEach(p => p.classList.toggle("hidden", p.dataset.subpanel !== t.dataset.sub));
-}));
+// sub-pestañas de Actualizaciones (Firmware / Respaldos).
+// Acotado a su propia pagina: hubo un fallo por usar $$(".subtab") global, que
+// al pulsar una subpestaña de otra pagina escondia estos paneles.
+function mostrarSubActualizaciones(sub) {
+  $$("#updates-page .subtab").forEach(x => x.classList.toggle("active", x.dataset.sub === sub));
+  $$("#updates-page [data-subpanel]").forEach(p => p.classList.toggle("hidden", p.dataset.subpanel !== sub));
+}
+
+$("#updates-page").addEventListener("click", (e) => {
+  const t = e.target.closest(".subtab");
+  if (t) mostrarSubActualizaciones(t.dataset.sub);
+});
 
 // formularios de Actualizaciones (delegado; cubre firmware y config)
 document.addEventListener("submit", async (e) => {
@@ -1055,7 +1065,7 @@ $$("dialog.modal").forEach(d => d.addEventListener("click", (e) => {
 // ---- Ajustes: subpestañas (Mi cuenta, Tema, y lo de admin) ----
 function ajustesSub(sub) {
   $$("#settings-tabs .subtab").forEach(b => b.classList.toggle("active", b.dataset.ssub === sub));
-  $$("[data-spanel]").forEach(p => p.classList.toggle("hidden", p.dataset.spanel !== sub));
+  $$("#settings-page [data-spanel]").forEach(p => p.classList.toggle("hidden", p.dataset.spanel !== sub));
   if (sub === "cuenta") loadAccount();
   if (sub === "acs") loadSettings();
   if (sub === "ia") loadLlm();
@@ -1138,14 +1148,23 @@ $("#llm-test").addEventListener("click", async () => {
 });
 
 // ===== Aprovisionamiento (admin): equipos nuevos, perfiles y DHCP =====
-$$("[data-psub]").forEach(b => b.addEventListener("click", () => {
-  $$("[data-psub]").forEach(x => x.classList.toggle("active", x === b));
-  $$("[data-ppanel]").forEach(p => p.classList.toggle("hidden", p.dataset.ppanel !== b.dataset.psub));
-  if (b.dataset.psub === "perfiles") loadPerfiles();
-  if (b.dataset.psub === "dhcp") loadDhcpDefaults();
-}));
+function mostrarSubProv(sub) {
+  $$("#prov-page [data-psub]").forEach(x => x.classList.toggle("active", x.dataset.psub === sub));
+  $$("#prov-page [data-ppanel]").forEach(p => p.classList.toggle("hidden", p.dataset.ppanel !== sub));
+  if (sub === "perfiles") loadPerfiles();
+  if (sub === "dhcp") loadDhcpDefaults();
+}
 
-function loadProv() { loadDescubrimiento(); }
+$("#prov-page").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-psub]");
+  if (b) mostrarSubProv(b.dataset.psub);
+});
+
+function loadProv() {
+  const activa = $$("#prov-page [data-psub]").find(b => b.classList.contains("active"));
+  mostrarSubProv(activa ? activa.dataset.psub : "nuevos");
+  loadDescubrimiento();
+}
 
 // ---- equipos nuevos ----
 async function loadDescubrimiento() {
@@ -1230,7 +1249,11 @@ async function loadPerfiles() {
             <button class="ghost small" data-unset="${escAttr(p.key)}" data-c="${escAttr(c)}">Quitar</button></dd></div>`).join("");
       return `<article class="prof-card">
         <h3>${esc(p.manufacturer || "?")} ${esc(p.model || "?")}</h3>
-        <p class="muted small">FW ${esc(p.firmware || "?")} · ${p.devices ?? "?"} equipo(s) · ${fmtDate(p.updated_at)}</p>
+        <p class="muted small prof-meta">
+          <span class="prof-fw" title="${escAttr(p.firmware || "")}">FW ${esc(recortar(p.firmware, 26))}</span>
+          <span>· ${p.devices ?? "?"} equipo(s)</span>
+          <span>· ${fmtFecha(p.updated_at)}</span>
+        </p>
         <dl class="prof-dl">${deducciones || `<div><dd class="muted">Sin deducciones todavía: falta refrescar el árbol de algún equipo de este modelo.</dd></div>`}</dl>
         ${over ? `<dl class="prof-dl prof-over"><div><dt>Correcciones</dt><dd></dd></div>${over}</dl>` : ""}
         ${ia.disponible ? `<button class="ghost small" data-ia="${escAttr(p.key)}">Proponer mapeo con IA</button>` : ""}
@@ -1330,6 +1353,20 @@ $("#dhcp-download").addEventListener("click", () => {
   a.href = URL.createObjectURL(blob); a.download = "tr069-dhcp.rsc"; a.click();
   URL.revokeObjectURL(a.href);
 });
+
+function recortar(txt, n) {
+  const s = (txt || "?").trim();
+  return s.length > n ? s.slice(0, n - 1) + "…" : s;
+}
+
+// fecha corta para fichas y listados: el año y los segundos no aportan aquí
+function fmtFecha(iso) {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  return d.toLocaleDateString(undefined, { day: "2-digit", month: "2-digit" })
+    + " " + d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+}
 
 function fmtDate(iso) { if (!iso) return "-"; const d = new Date(iso); return isNaN(d) ? iso : d.toLocaleString(); }
 function isRecent(iso) { if (!iso) return false; return (Date.now() - new Date(iso).getTime()) < 15 * 60 * 1000; }

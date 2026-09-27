@@ -12,6 +12,8 @@
   --warn:#f59e0b; --warn-ink:#3a2606; --warn-weak:rgba(245,158,11,.14);
   --err:#ef4444; --err-ink:#450a0a; --err-weak:rgba(239,68,68,.13);
   --radius:12px; --radius-sm:8px;
+  /* medidas de las tarjetas: iguales en equipos, perfiles y estado */
+  --tarjeta:clamp(280px,22vw,340px); --tarjeta-alto:11.5rem;
   --shadow:0 1px 2px rgba(0,0,0,.35); --shadow-lg:0 18px 45px rgba(0,0,0,.45);
 }
 *{box-sizing:border-box}
@@ -131,9 +133,11 @@ main{width:100%;max-width:1760px;margin:0 auto;padding:1.5rem clamp(1rem,2.5vw,2
 .filter{margin-bottom:1rem}
 
 /* ---------- lista de equipos ---------- */
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(clamp(240px,20vw,320px),1fr));gap:1rem}
-.dev-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:1rem;
-  cursor:pointer;box-shadow:var(--shadow);transition:border-color .15s,transform .15s,box-shadow .15s}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--tarjeta),1fr));gap:1rem}
+.dev-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  padding:1rem 1.1rem;cursor:pointer;box-shadow:var(--shadow);min-height:var(--tarjeta-alto);
+  display:flex;flex-direction:column;transition:border-color .15s,transform .15s,box-shadow .15s}
+.dev-card .meta{margin-top:auto}
 .dev-card:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:var(--shadow-lg)}
 .dev-card h3{margin:0 0 .3rem;font-size:1rem}
 .dev-card .model{color:var(--accent);font-size:.9rem}
@@ -148,9 +152,10 @@ main{width:100%;max-width:1760px;margin:0 auto;padding:1.5rem clamp(1rem,2.5vw,2
 .dev-header h2{margin:0;word-break:break-all}
 .tags .tag{background:var(--accent-weak);border:1px solid var(--line);color:var(--accent);
   padding:.15rem .5rem;border-radius:6px;font-size:.75rem;margin-right:.3rem}
-.status-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(clamp(240px,18vw,300px),1fr));gap:1.2rem;margin-bottom:2rem}
+.status-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--tarjeta),1fr));
+  gap:1rem;margin-bottom:2rem}
 .section{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
-  padding:1.2rem 1.3rem;box-shadow:var(--shadow)}
+  padding:1rem 1.1rem;box-shadow:var(--shadow);min-height:var(--tarjeta-alto)}
 .section h4{margin:0 0 1rem;padding-bottom:.6rem;border-bottom:1px solid var(--line);
   font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--accent)}
 .section-grid{display:flex;flex-direction:column;gap:1rem}
@@ -291,21 +296,29 @@ main{width:100%;max-width:1760px;margin:0 auto;padding:1.5rem clamp(1rem,2.5vw,2
 .modal p.muted{margin:0 0 .8rem}
 
 /* catalogo de perfiles: rejilla de tarjetas compactas, no una tarjeta por pantalla */
-.prof-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(clamp(320px,26vw,420px),1fr));
-  gap:1rem;margin-bottom:1.5rem;align-items:start}
+/* Tarjetas estandarizadas: todas el mismo ancho de columna y la misma altura
+   dentro de su fila, con el interior alineado (titulo, metadatos, contenido,
+   accion). Una tarjeta mas corta no encoge: empuja su accion al fondo. */
+.prof-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--tarjeta),1fr));
+  gap:1rem;margin-bottom:1.5rem}
 .prof-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
-  padding:.9rem 1.1rem 1rem;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:.55rem}
-.prof-card h3{margin:0;font-size:.98rem}
-.prof-card > p{margin:0}
-.prof-card > button{align-self:flex-start;margin-top:.2rem}
-.prof-dl{margin:0;display:grid;gap:.3rem}
-.prof-dl > div{display:grid;grid-template-columns:5.6rem 1fr;gap:.7rem;align-items:baseline;
-  font-size:.83rem;padding:.3rem 0;border-top:1px solid var(--line-soft)}
+  padding:1rem 1.1rem;box-shadow:var(--shadow);min-height:var(--tarjeta-alto);
+  display:flex;flex-direction:column}
+.prof-card h3{margin:0 0 .15rem;font-size:.97rem}
+.prof-card > p{margin:0 0 .6rem}
+.prof-card .prof-dl:last-of-type{flex:1}
+.prof-card > button{margin-top:.8rem;align-self:flex-start}
+.prof-dl{margin:0}
+.prof-dl > div{display:grid;grid-template-columns:6.4rem 1fr;gap:.6rem;align-items:baseline;
+  font-size:.82rem;padding:.32rem 0;border-top:1px solid var(--line-soft)}
 .prof-dl > div:first-child{border-top:0}
 .prof-dl dt{font-weight:600}
 .prof-dl dd{margin:0;word-break:break-word}
 .prof-over{margin-top:.2rem;border-top:1px solid var(--line);padding-top:.4rem}
 .prof-over dt{color:var(--accent)}
+.prof-meta{display:flex;flex-wrap:wrap;gap:.15rem .5rem;font-variant-numeric:tabular-nums}
+.prof-meta span{white-space:nowrap}
+.prof-fw{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* el generador de DHCP: formulario ancho y script a continuacion */
 #dhcp-form{max-width:none}
@@ -328,6 +341,7 @@ main{width:100%;max-width:1760px;margin:0 auto;padding:1.5rem clamp(1rem,2.5vw,2
   .tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin}
   .tab{white-space:nowrap}
   .status-grid{grid-template-columns:1fr}
+  .prof-card,.dev-card,.section{min-height:0}
 }
 @media (prefers-reduced-motion:reduce){
   *{animation-duration:.01ms !important;transition-duration:.01ms !important}
