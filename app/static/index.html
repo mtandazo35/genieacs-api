@@ -611,7 +611,7 @@
               <option value="local">Local (vLLM / compatible)</option>
             </select>
           </label>
-          <label>Modelo<input id="llm-model" placeholder="por defecto, el del proveedor"></label>
+          <label>Modelo<input id="llm-model" list="llm-modelos" placeholder="por defecto, el del proveedor"><datalist id="llm-modelos"></datalist></label>
         </div>
         <label>Clave de API<input id="llm-key" type="password" autocomplete="off" placeholder="pegar aquí (no se vuelve a mostrar)"></label>
         <label>URL del API<input id="llm-base" placeholder="vacío = https://api.groq.com/openai/v1"></label>
@@ -623,6 +623,10 @@
           <button type="button" id="llm-clear" class="ghost small">Borrar clave</button>
         </div>
         <div id="llm-result" class="small"></div>
+        <div id="llm-modelos-vista" class="small hidden">
+          <span class="muted">Modelos del proveedor (clic para usarlo):</span>
+          <div id="llm-modelos-chips" class="chips"></div>
+        </div>
       </form>
       </div>
     </section>

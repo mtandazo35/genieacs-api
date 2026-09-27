@@ -57,23 +57,85 @@ def _destino(cfg: dict | None = None) -> tuple[str, str, str]:
     return (cfg["base_url"] or base), (cfg["model"] or modelo), cfg["api_key"]
 
 
-async def probar(cfg: dict | None = None) -> dict:
-    """Comprueba que la clave y el modelo funcionan, con la peticion mas barata.
+def _mensaje_del_proveedor(r) -> str:
+    """Lo que dice el proveedor, tal cual. Adivinar la causa nos costo una tarde."""
+    try:
+        data = r.json()
+    except ValueError:
+        return (r.text or "")[:200]
+    err = data.get("error") if isinstance(data, dict) else None
+    if isinstance(err, dict):
+        return str(err.get("message") or err.get("code") or err)[:200]
+    return str(err or data)[:200]
 
-    Acepta una configuracion sin guardar para poder probar antes de guardarla."""
-    base, modelo, clave = _destino(cfg)
+
+async def listar_modelos(cfg: dict | None = None) -> list[str]:
+    """Modelos que el proveedor dice tener. Valida clave y URL sin gastar tokens."""
+    base, _modelo, clave = _destino(cfg)
+    async with httpx.AsyncClient(timeout=30.0) as c:
+        r = await c.get(f"{base}/models", headers={"Authorization": f"Bearer {clave}"})
+    if r.status_code != 200:
+        raise ProveedorRechaza(r.status_code, _mensaje_del_proveedor(r), base)
+    datos = r.json()
+    filas = datos.get("data") if isinstance(datos, dict) else datos
+    return sorted(str(m.get("id")) for m in (filas or []) if isinstance(m, dict) and m.get("id"))
+
+
+class ProveedorRechaza(RuntimeError):
+    def __init__(self, status: int, mensaje: str, base: str):
+        self.status, self.mensaje, self.base = status, mensaje, base
+        super().__init__(f"HTTP {status}: {mensaje}")
+
+
+async def probar(cfg: dict | None = None) -> dict:
+    """Comprueba la configuracion contra el proveedor y dice que modelos hay.
+
+    Primero pide la lista de modelos: eso valida la clave y la URL sin gastar
+    tokens y permite decir exactamente que modelos se pueden usar."""
+    base, preset, _clave = _destino(cfg)
+    # el del campo Modelo, no el que rellena el preset: si el usuario lo fijo y no
+    # existe hay que decirlo, y si lo dejo vacio se elige uno que si exista
+    del_usuario = ((cfg or runtime.llm_config()).get("model") or "").strip()
+    try:
+        modelos = await listar_modelos(cfg)
+    except ProveedorRechaza as e:
+        motivo = {401: "la clave no es valida", 403: "la clave no tiene permiso"}.get(
+            e.status, f"{e.base} no respondio como API (HTTP {e.status})")
+        return {"ok": False, "proveedor": e.base, "error": f"{motivo}: {e.mensaje}"}
+
+    if del_usuario and del_usuario not in modelos:
+        muestra = ", ".join(modelos[:6]) or "ninguno"
+        return {"ok": False, "proveedor": base, "modelo": del_usuario, "modelos": modelos,
+                "error": f"el proveedor no tiene el modelo '{del_usuario}'. Disponibles: {muestra}"}
+
+    elegido = del_usuario or _preferido(modelos, preset)
+    if not elegido:
+        return {"ok": False, "proveedor": base, "modelos": modelos,
+                "error": "la clave funciona, pero el proveedor no ofrece ningun modelo"}
+
     async with httpx.AsyncClient(timeout=30.0) as c:
         r = await c.post(f"{base}/chat/completions",
-                         json={"model": modelo, "max_tokens": 1,
+                         json={"model": elegido, "max_tokens": 1,
                                "messages": [{"role": "user", "content": "ok"}]},
-                         headers={"Authorization": f"Bearer {clave}"})
+                         headers={"Authorization": f"Bearer {_destino(cfg)[2]}"})
     if r.status_code == 200:
-        return {"ok": True, "modelo": modelo, "proveedor": base}
-    detalle = {401: "la clave no es valida",
-               403: "la clave no tiene permiso para este modelo",
-               404: f"{base} no responde como API (revisa la URL) o ese modelo no existe",
-               429: "limite de peticiones del proveedor"}.get(r.status_code, f"HTTP {r.status_code}")
-    return {"ok": False, "modelo": modelo, "proveedor": base, "error": detalle}
+        return {"ok": True, "modelo": elegido, "proveedor": base, "modelos": modelos}
+    return {"ok": False, "modelo": elegido, "proveedor": base, "modelos": modelos,
+            "error": f"el modelo '{elegido}' no acepto la peticion: {_mensaje_del_proveedor(r)}"}
+
+
+# preferencia cuando el usuario no fija modelo: primero los de instrucciones
+# conocidos, y si no, el primero que ofrezca el proveedor
+_PREFERIDOS = ("llama-3.3-70b-versatile", "llama-3.1-8b-instant",
+               "openai/gpt-oss-120b", "gpt-4o-mini")
+
+
+def _preferido(modelos: list[str], preset: str = "") -> str | None:
+    for m in (preset, *_PREFERIDOS):
+        if m and m in modelos:
+            return m
+    utiles = [m for m in modelos if not any(x in m.lower() for x in ("whisper", "tts", "guard", "embed"))]
+    return (utiles or modelos or [None])[0]
 
 
 def _prompt(conceptos: list[str], rutas: list[str], modelo_cpe: str) -> list[dict]:
