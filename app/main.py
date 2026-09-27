@@ -135,7 +135,10 @@ def _audit_detail(method, parts, b):
         if len(parts) > 1 and parts[1] == "proponer":
             return "Pidio a la IA un mapeo para un modelo"
         return f"Confirmo el mapeo de '{b.get('concept', '')}' propuesto por la IA"
-    if parts[0] == "settings": return "Cambio la conexion al ACS"
+    if parts[0] == "settings":
+        if len(parts) > 1 and parts[1] == "llm":
+            return "Configuro el proveedor de IA"      # nunca la clave
+        return "Cambio la conexion al ACS"
     if parts[0] == "profiles": return f"Corrigio la ruta de '{b.get('concept', '')}' en un perfil de modelo"
     return f"{method} {seg or '/'.join(parts[:2])}"
 

@@ -78,7 +78,7 @@ function navigate(nav) {
   try { localStorage.setItem("view", nav); localStorage.removeItem("device"); } catch {}
   if (nav === "devices") loadDevices();
   if (nav === "users") loadUsers();
-  if (nav === "settings") loadSettings();
+  if (nav === "settings") { loadSettings(); loadLlm(); }
   if (nav === "prov") loadProv();
   if (nav === "updates") loadUpdates();
   if (nav === "account") loadAccount();
@@ -974,6 +974,48 @@ document.addEventListener("click", async (e) => {
 // ===== Utilidades de formato =====
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function escAttr(s) { return esc(s); }
+
+
+// ---- Ajustes: proveedor de IA ----
+async function loadLlm() {
+  try {
+    const c = await api("/settings/llm");
+    $("#llm-provider").value = c.provider || "groq";
+    $("#llm-model").value = c.model || "";
+    $("#llm-base").value = c.base_url || "";
+    $("#llm-key").value = "";
+    $("#llm-state").textContent = c.key_set
+      ? `Clave configurada (origen: ${c.source}). Por seguridad no se muestra; escribe una nueva para reemplazarla.`
+      : "Sin clave: la propuesta de mapeo por IA está desactivada.";
+    $("#llm-result").textContent = "";
+  } catch (e) { toast(e.message, "err"); }
+}
+
+$("#llm-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const body = { provider: $("#llm-provider").value, model: $("#llm-model").value.trim(),
+                 base_url: $("#llm-base").value.trim() };
+  const k = $("#llm-key").value.trim();
+  if (k) body.api_key = k;
+  try { await api("/settings/llm", { method: "PUT", body }); toast("✓ Guardado", "ok"); loadLlm(); }
+  catch (err) { toast(err.message, "err"); }
+});
+
+$("#llm-clear").addEventListener("click", async () => {
+  if (!confirm("¿Borrar la clave guardada? La propuesta por IA quedará desactivada.")) return;
+  try { await api("/settings/llm", { method: "PUT", body: { api_key: "" } }); toast("Clave borrada", "ok"); loadLlm(); }
+  catch (err) { toast(err.message, "err"); }
+});
+
+$("#llm-test").addEventListener("click", async () => {
+  const el = $("#llm-result");
+  el.textContent = "Probando…"; el.style.color = "var(--muted)";
+  try {
+    const r = await api("/settings/llm/test", { method: "POST" });
+    if (r.ok) { el.textContent = `✓ Responde (${r.modelo} en ${r.proveedor})`; el.style.color = "var(--ok)"; }
+    else { el.textContent = "✗ " + (r.error || "no responde"); el.style.color = "var(--err)"; }
+  } catch (e) { el.textContent = "✗ " + e.message; el.style.color = "var(--err)"; }
+});
 
 // ===== Aprovisionamiento (admin): equipos nuevos, perfiles y DHCP =====
 $$("[data-psub]").forEach(b => b.addEventListener("click", () => {
