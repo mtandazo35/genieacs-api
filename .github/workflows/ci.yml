@@ -23,6 +23,15 @@ jobs:
       - name: pruebas
         run: python -m pytest -q tests
       - name: pip-audit (CVEs en dependencias)
-        run: python -m pip_audit -r requirements.txt
+        # consulta un servicio externo: un corte de red no es un fallo del
+        # codigo, asi que se reintenta antes de dar el CI por roto
+        run: |
+          for intento in 1 2 3; do
+            if python -m pip_audit -r requirements.txt; then exit 0; fi
+            echo "pip-audit fallo (intento $intento); reintentando en 20 s"
+            sleep 20
+          done
+          echo "pip-audit no pudo completarse tras 3 intentos"
+          exit 1
       - name: instalador
         run: bash -n install.sh && shellcheck -S error install.sh
