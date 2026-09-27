@@ -1497,24 +1497,172 @@ $("#prof-list").addEventListener("click", async (e) => {
     return;
   }
   const ia = e.target.closest("[data-ia]");
-  if (ia) {
-    const dev = prompt("ID del equipo de ese modelo sobre el que proponer (cópialo de la lista de equipos):");
-    if (!dev) return;
-    ia.disabled = true; const prev = ia.textContent; ia.textContent = "Consultando…";
-    try {
-      const r = await api("/homologacion/proponer", { method: "POST", body: { device_id: dev } });
-      if (!r.sugerencias || !r.sugerencias.length) { toast(r.detail || "Sin sugerencias", "info"); return; }
-      for (const s of r.sugerencias) {
-        if (confirm(`¿Usar esta ruta para ${s.concept}?\\n\\n${s.path}\\n\\nValor actual: ${s.valor_actual}`)) {
-          await api("/homologacion/confirmar", { method: "POST",
-            body: { key: r.key, concept: s.concept, path: s.path } });
-        }
-      }
-      loadPerfiles();
-    } catch (err) { toast(err.message, "err"); }
-    finally { ia.disabled = false; ia.textContent = prev; }
+  if (ia) abrirPropuestaIa(ia.dataset.ia);
+});
+
+// ---- propuesta de mapeo por IA (modal de dos pasos) ----
+// Antes esto pedia el id del equipo con un dialogo nativo del navegador y luego
+// confirmaba una a una cada sugerencia con otro: el id no hay que copiarlo a mano
+// de ningun sitio (el panel ya tiene la lista de equipos) y una tanda de avisos
+// nativos no deja revisar nada.
+let iaPropuesta = null;
+let iaPerfilPulsado = null;   // la clave de la tarjeta desde la que se abrio   // {key, sugerencias} de lo que se esta revisando
+
+// "?" es lo que pone la clave cuando el equipo no reporta el dato: no es un valor
+const iaNorm = (s) => { const t = String(s ?? "").trim().toLowerCase(); return t === "?" ? "" : t; };
+
+// el firmware NO entra en el filtro: un equipo con otra version sigue siendo de
+// este modelo, y de el se leen las mismas rutas
+function iaEquiposDelModelo(fab, modelo) {
+  return (S.devices || []).filter(d =>
+    iaNorm(d.manufacturer) === iaNorm(fab) && iaNorm(d.model) === iaNorm(modelo));
+}
+
+function iaEtiquetaEquipo(d) {
+  const quien = d.name || d.customer || `${d.manufacturer || "?"} ${d.model || ""}`.trim() || "sin nombre";
+  // el FW va en la etiqueta porque decide EN QUE perfil acaba la correccion
+  return `${quien} (${d.serial || d.id}) · FW ${d.firmware || "?"}`;
+}
+
+// aviso cuando el equipo elegido no es del firmware de la tarjeta que se pulso:
+// el perfil se guarda por fabricante|clase|modelo|firmware, asi que la
+// correccion acabaria en otro perfil distinto del que se estaba mirando
+function iaAvisoFirmware() {
+  if (!iaPerfilPulsado) return "";
+  const fw = String(iaPerfilPulsado).split("|")[3] || "";
+  const d = (S.devices || []).find(x => x.id === $("#ia-dev").value);
+  if (!d || !fw || fw === "?" || iaNorm(d.firmware) === iaNorm(fw)) return "";
+  return `Ese equipo lleva FW ${d.firmware || "?"} y la tarjeta es del FW ${fw}: `
+       + `lo que confirmes se guardará en el perfil del FW ${d.firmware || "?"}.`;
+}
+
+// la clave del perfil es fabricante|clase|modelo|firmware
+async function abrirPropuestaIa(key) {
+  const [fab, , modelo] = String(key).split("|");
+  iaPerfilPulsado = key;
+  iaPropuesta = null;
+  $("#ia-modal-titulo").textContent = `Proponer mapeo para ${fab || "?"} ${modelo || "?"}`;
+  $("#ia-sugerencias").innerHTML = "";
+  $("#ia-guardar").classList.add("hidden");
+  $("#ia-estado").textContent = "";
+  abrirModal("#ia-modal");   // showModal() nativo: Esc, foco atrapado y ::backdrop
+  // la lista de equipos puede no estar cargada si se entro directo a Aprovisionamiento
+  if (!(S.devices || []).length) {
+    $("#ia-estado").textContent = "Cargando la lista de equipos…";
+    await loadDevices();
+    if (!$("#ia-modal").open) return;   // lo cerraron mientras cargaba
+    $("#ia-estado").textContent = "";
+  }
+  const mismos = iaEquiposDelModelo(fab, modelo);
+  const sel = $("#ia-dev");
+  sel.innerHTML = mismos.map(d =>
+    `<option value="${escAttr(d.id)}">${esc(iaEtiquetaEquipo(d))}</option>`).join("");
+  sel.disabled = !mismos.length;
+  $("#ia-proponer").disabled = !mismos.length;
+  if (!mismos.length) {
+    sel.innerHTML = `<option value="">— ningún equipo de este modelo —</option>`;
+    $("#ia-estado").textContent = `No hay ningún ${fab || "?"} ${modelo || "?"} en el ACS. `
+      + `Las rutas se leen de un equipo real, así que hace falta que al menos un equipo de este `
+      + `modelo esté dado de alta y haya reportado: abre su ficha y vuelve aquí.`;
+  } else {
+    sel.focus();
+    $("#ia-estado").textContent = iaAvisoFirmware();
+  }
+}
+
+// rutas que el modelo se invento (el servidor las descarta) y lo que dejo por escrito
+function iaExtrasPropuesta(r) {
+  const partes = [];
+  const descartadas = r.descartadas || [];
+  const dudas = Array.isArray(r.dudas) ? r.dudas : (r.dudas ? [r.dudas] : []);
+  if (descartadas.length) {
+    partes.push(`<h5 class="ia-tit">${descartadas.length} ruta(s) descartadas
+      <span class="tag-warn" title="El modelo devolvió rutas que no están en el árbol de este modelo: se las inventó. El servidor las descarta y no llegan al catálogo.">inventadas</span></h5>`);
+    partes.push(`<div class="adv-list">` + descartadas.map(x =>
+      `<div class="adv-row"><div class="adv-path">${esc(Array.isArray(x) ? x[1] : x)}</div></div>`).join("") + `</div>`);
+  }
+  if (dudas.length) {
+    partes.push(`<h5 class="ia-tit">Dudas que dejó por escrito</h5>
+      <ul class="small ia-dudas">` + dudas.map(x => `<li>${esc(x)}</li>`).join("") + `</ul>`);
+  }
+  return partes.join("");
+}
+
+function pintarSugerenciasIa(r) {
+  const sug = r.sugerencias || [];
+  $("#ia-sugerencias").innerHTML = `<div class="adv-list">` + sug.map((s, i) =>
+    `<div class="adv-row">
+      <div class="adv-path">
+        <label class="chk"><input type="checkbox" data-sug="${i}" checked>
+          <span>${esc(s.concept)}</span></label>
+        <code>${esc(s.path)}</code>
+      </div>
+      <div class="adv-val muted small">Valor actual: ${s.valor_actual == null || s.valor_actual === ""
+        ? "(vacío)" : esc(s.valor_actual)}</div>
+    </div>`).join("") + `</div>` + iaExtrasPropuesta(r);
+}
+
+$("#ia-dev").addEventListener("change", () => {
+  if (!iaPropuesta) $("#ia-estado").textContent = iaAvisoFirmware();
+});
+
+$("#ia-proponer").addEventListener("click", async () => {
+  const dev = $("#ia-dev").value;
+  if (!dev) return;
+  const b = $("#ia-proponer"); const prev = b.textContent;
+  b.disabled = true; b.textContent = "Consultando…";
+  $("#ia-estado").textContent = "Consultando… (al proveedor solo van rutas, nunca valores)";
+  $("#ia-sugerencias").innerHTML = "";
+  $("#ia-guardar").classList.add("hidden");
+  iaPropuesta = null;
+  try {
+    const r = await api("/homologacion/proponer", { method: "POST", body: { device_id: dev } });
+    const sug = r.sugerencias || [];
+    if (!sug.length) {
+      // sin sugerencias no hay nada que revisar: se dice y se queda en el paso 1
+      $("#ia-estado").textContent = r.detail || "El modelo no propuso ninguna ruta válida.";
+      $("#ia-sugerencias").innerHTML = iaExtrasPropuesta(r);
+      return;
+    }
+    iaPropuesta = { key: r.key, sugerencias: sug };
+    $("#ia-estado").textContent = `${sug.length} sugerencia(s). Revisa cada ruta y deja marcadas `
+      + `solo las que quieras guardar: nada se aplica hasta que pulses Guardar.`;
+    pintarSugerenciasIa(r);
+    $("#ia-guardar").classList.remove("hidden");
+  } catch (e) { $("#ia-estado").textContent = e.message; toast(e.message, "err"); }
+  finally { b.disabled = false; b.textContent = prev; }
+});
+
+$("#ia-guardar").addEventListener("click", async () => {
+  if (!iaPropuesta) return;
+  const marcadas = $$("#ia-sugerencias input[type=checkbox]:checked")
+    .map(c => iaPropuesta.sugerencias[Number(c.dataset.sug)]).filter(Boolean);
+  if (!marcadas.length) { toast("No has marcado ninguna ruta", "info"); return; }
+  const b = $("#ia-guardar"); const prev = b.textContent;
+  b.disabled = true; b.textContent = "Guardando…";
+  const key = iaPropuesta.key;
+  let hechas = 0;
+  try {
+    // una llamada por ruta: el servidor guarda las correcciones de una en una
+    for (const s of marcadas) {
+      await api("/homologacion/confirmar", { method: "POST",
+        body: { key, concept: s.concept, path: s.path } });
+      hechas++;
+    }
+    toast(`✓ ${hechas} ruta(s) guardadas en el catálogo`, "ok");
+    cerrarModal($("#ia-modal"));
+  } catch (e) {
+    toast(`${e.message} — se guardaron ${hechas} de ${marcadas.length}`, "err");
+  } finally {
+    b.disabled = false; b.textContent = prev;
+    if (hechas) loadPerfiles();
   }
 });
+
+$("#ia-cerrar").addEventListener("click", () => cerrarModal($("#ia-modal")));
+
+// Esc, el boton Cerrar, el clic en el fondo y el cierre forzado al caducar la sesion
+$("#ia-modal").addEventListener("close", () => { iaPropuesta = null; });
 
 // ---- arboles por modelo ----
 // La union de las rutas TR-069 de todos los equipos de un modelo. Aqui solo se
@@ -1714,6 +1862,19 @@ $("#dhcp-form").addEventListener("submit", async (e) => {
 $("#dhcp-copy").addEventListener("click", async () => {
   try { await navigator.clipboard.writeText($("#dhcp-script").textContent); toast("✓ Copiado", "ok"); }
   catch { toast("El navegador no dejó copiar; selecciona el texto", "err"); }
+});
+
+// ---- Ajustes -> DHCP en MikroTik (tutorial) ----
+// El bloque de comandos es el mismo ejemplo de DEPLOY.md, que es lo que genera
+// app/dhcp_tr069.py: se copia tal cual, sin retocar la sintaxis.
+$("#tuto-dhcp-copiar").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("#tuto-dhcp-cmd").textContent); toast("✓ Comandos copiados", "ok"); }
+  catch { toast("El navegador no dejó copiar; selecciona el texto", "err"); }
+});
+
+$("#tuto-dhcp-ir").addEventListener("click", () => {
+  navigate("prov");
+  mostrarSubProv("dhcp");
 });
 
 $("#dhcp-download").addEventListener("click", () => {
