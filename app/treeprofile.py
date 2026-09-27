@@ -446,3 +446,97 @@ def wan_current_ip(doc: dict) -> str | None:
     if not dp:
         return None
     return {p: v for p, v, _w in flatten(doc)}.get(dp[0])
+
+
+# ---------------------------------------------------------------------------
+# Que sabe hacer CADA modelo, deducido de su arbol.
+#
+# El panel enseñaba las mismas pestanas y campos para todos, y el usuario
+# descubria al pulsar que ese equipo no lo soportaba. Aqui se mira si el
+# parametro existe (y si es escribible) para cada funcion.
+#
+# Tres estados, y el tercero importa: con el arbol a medias no se puede decir
+# "no soportado", solo "todavia no se sabe".
+# ---------------------------------------------------------------------------
+
+SI, NO, QUIZA = "si", "no", "desconocido"
+
+# funcion -> (conceptos que la sustentan, descripcion para el panel)
+FUNCIONES = {
+    "wifi_2g":      (["wifi_2g_ssid"], "WiFi 2.4 GHz"),
+    "wifi_5g":      (["wifi_5g_ssid"], "WiFi 5 GHz"),
+    "wifi_canal":   (["wifi_2g_channel", "wifi_5g_channel"], "Cambiar el canal"),
+    "wifi_oculta":  (["wifi_2g_hidden", "wifi_5g_hidden"], "Ocultar el SSID"),
+    "clientes_wifi": (["wifi_2g_clients", "wifi_5g_clients"], "Clientes conectados por radio"),
+    "lan":          (["lan_ip"], "Red LAN"),
+    "dhcp":         (["dhcp_min", "dhcp_max"], "Servidor DHCP"),
+    "wan_dhcp":     (["wan_mode"], "WAN por DHCP"),
+    "wan_estatica": (["wan_ip", "wan_mask"], "WAN con IP fija"),
+    "wan_pppoe":    (["pppoe_user"], "WAN por PPPoE"),
+    "dns":          (["lan_dns", "wan_dns"], "Servidores DNS"),
+    "hora":         (["tz", "ntp1"], "Hora y NTP"),
+    "acceso_remoto": (["remote_enable"], "Acceso remoto por WAN"),
+    "usuario_admin": (["admin_user"], "Usuario/clave del equipo"),
+}
+
+# funcion -> patron de ruta (cosas que no son conceptos del mapa)
+FUNCIONES_POR_RUTA = {
+    "ipv6":        (r"(IPv6Enable|X_TP_IPv6AddrType|IPv6Address\.\d+\.IPAddress)$", "IPv6"),
+    "diag_ping":   (r"(IPPingDiagnostics|IPPing)\.DiagnosticsState$", "Ping desde el equipo"),
+    "diag_trace":  (r"TraceRoute\.?(Diagnostics)?\.DiagnosticsState$", "Traceroute desde el equipo"),
+    "clientes_lan": (r"Hosts\.Host\.\d+\.", "Lista de clientes de la LAN"),
+}
+
+# lo que no depende del arbol: son llamadas TR-069, las soporta cualquier CPE
+FUNCIONES_RPC = {
+    "reinicio": "Reiniciar",
+    "factory_reset": "Restaurar de fabrica",
+    "firmware": "Actualizar firmware",
+    "reinicio_programado": "Reinicio programado",
+}
+
+
+def capabilities(doc: dict, pmap: dict | None = None) -> dict:
+    """Que puede hacer este modelo, con el porque de cada respuesta."""
+    from .parammap import pick_map
+
+    pmap = pmap or pick_map(doc)
+    completo = coverage(doc)["complete"]
+    params = flatten(doc)
+    presentes = {p for p, _v, _w in params}
+    escribibles = {p for p, _v, w in params if w}
+    eff = effective_params(pmap, doc)
+    out = {}
+
+    def anotar(clave, etiqueta, rutas):
+        """rutas: las que sustentan la funcion en ESTE equipo."""
+        hay = [r for r in rutas if r in presentes]
+        if hay:
+            estado, detalle = SI, hay[0]
+        elif completo:
+            estado, detalle = NO, "el equipo no lo expone en su arbol"
+        else:
+            estado, detalle = QUIZA, "falta refrescar el arbol para saberlo"
+        out[clave] = {"nombre": etiqueta, "estado": estado,
+                      "escribible": any(r in escribibles for r in hay), "detalle": detalle}
+
+    for clave, (conceptos, etiqueta) in FUNCIONES.items():
+        rutas = [eff[c][0] for c in conceptos if c in eff]
+        anotar(clave, etiqueta, rutas)
+
+    for clave, (patron, etiqueta) in FUNCIONES_POR_RUTA.items():
+        rx = re.compile(patron)
+        rutas = [p for p in presentes if rx.search(p)]
+        anotar(clave, etiqueta, rutas)
+
+    for clave, etiqueta in FUNCIONES_RPC.items():
+        out[clave] = {"nombre": etiqueta, "estado": SI, "escribible": True,
+                      "detalle": "es una orden TR-069, no depende del arbol"}
+
+    out["_resumen"] = {
+        "soportadas": sorted(k for k, v in out.items() if not k.startswith("_") and v["estado"] == SI),
+        "no_soportadas": sorted(k for k, v in out.items() if not k.startswith("_") and v["estado"] == NO),
+        "por_saber": sorted(k for k, v in out.items() if not k.startswith("_") and v["estado"] == QUIZA),
+        "arbol_completo": completo,
+    }
+    return out
