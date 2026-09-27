@@ -158,6 +158,10 @@ Tres cosas la hacen segura:
 - Una ruta que el modelo se invente **se descarta**: solo se aceptan rutas que existen en el árbol de ese equipo.
 - **Nada se aplica solo**: la propuesta se muestra con el valor actual de cada ruta, y solo al confirmar se guarda como corrección del catálogo.
 
+**Cómo se pide.** En Aprovisionamiento → *Perfiles de modelo*, el botón **Proponer mapeo con IA** de la tarjeta del modelo abre un modal. El equipo se elige en un **desplegable con los equipos de ese modelo** que el panel ya tiene listados: antes había que escribir a mano el identificador con el que GenieACS conoce al equipo (`OUI-ProductClass-Serie`, con los escapes de URL de la clase de producto), lo que obligaba a irse a la lista de equipos a copiarlo. El desplegable filtra por fabricante y modelo y **no** por firmware, porque un equipo con otra versión sigue siendo de ese modelo y de él se leen las mismas rutas. Si no hay ningún equipo de ese modelo en el ACS, el modal lo dice y no deja consultar: las rutas salen de un equipo real, no del catálogo.
+
+La respuesta se revisa en una **lista con una casilla por sugerencia** (marcadas de entrada), con el concepto, la ruta propuesta y su valor actual; **Guardar las marcadas** confirma solo ésas, una llamada a `/homologacion/confirmar` por ruta, y si alguna falla dice cuántas se guardaron. Antes se preguntaba por cada sugerencia con un `confirm()` del navegador: seis rutas eran seis diálogos seguidos, sin ver el conjunto y sin poder descartar una sola sin haber decidido ya las anteriores. En el mismo modal se ven ahora las **rutas descartadas por inventadas** y las dudas que dejó el modelo, que la API ya devolvía y el panel tiraba.
+
 Se configura **desde el panel** (Ajustes → Inteligencia artificial): proveedor, clave, modelo y URL. Lo guardado en el panel manda sobre el `.env`, y hay un botón **Probar** que se puede usar **sin guardar** nada.
 
 **Probar** pregunta primero `GET {URL}/models`: eso valida la clave y la URL sin gastar tokens y devuelve **la lista de modelos que ese proveedor tiene de verdad**, que el panel ofrece como chips (un clic los pone en el campo Modelo). Solo después hace una petición mínima al modelo elegido. Así cada fallo dice lo que es, con el mensaje literal del proveedor: clave inválida (401), URL que no es un API (no tiene `/models`), o un modelo que ese proveedor no sirve — antes los tres salían como el mismo 404 ambiguo. Si el campo Modelo se deja vacío se usa el del proveedor, y si ese no está en su lista se elige uno que sí esté; tras una prueba correcta queda escrito en el campo. **La clave no se devuelve nunca** por la API (solo `key_set: true`) ni aparece en la auditoría. Proveedores: **Groq** por defecto, y cualquier otro compatible con el API de OpenAI (OpenRouter, Together, vLLM local) con el mismo cliente. Como esos modelos tienen ventanas de contexto cortas, solo se mandan las rutas escribibles y las de estado, con un tope.
@@ -297,8 +301,17 @@ Limitaciones actuales por modelo de datos:
 | Tema | todos | las cuatro paletas del panel |
 | Conexión al ACS | admin | la URL del NBI, el timeout y el connection request |
 | Inteligencia artificial | admin | proveedor, clave y modelo para la homologación asistida |
+| DHCP en MikroTik | admin | el tutorial de la opción 43: por qué hace falta, los comandos que se pegan, cómo comprobarlo y cómo deshacerlo |
 
-Lo que toca servidores queda marcado como `admin-only` y no se le muestra a un usuario ISP; su cuenta y el tema, sí.
+Lo que toca servidores queda marcado como `admin-only` y no se le muestra a un usuario ISP; su cuenta y el tema, sí. El tutorial de DHCP no cambia nada en ningún sitio, pero son comandos que tocan el DHCP de un ISP y llevan la URL del ACS: es información de servidor, igual que *Conexión al ACS*, así que va también como `admin-only`.
+
+### Ajustes → DHCP en MikroTik (tutorial, admin)
+
+Cinco pasos en orden: qué hace la opción 43 y por qué el CPE la pide (se anuncia en la opción 60 como `dslforum.org` y el servidor le responde con la URL del ACS); el ejemplo completo de comandos para RouterOS 7 con las tres codificaciones y un botón para copiarlo; cómo comprobar que quedó puesto —incluida la opción 60 que anuncia cada CPE en `lease print detail`—; cómo deshacerlo; y un botón que lleva al generador de Aprovisionamiento → DHCP, que es el que hace el script con los rangos reales.
+
+El contenido no es nuevo: está en [DEPLOY.md](DEPLOY.md#entregar-el-acs-por-dhcp-mikrotik) y, resumido, en el plegable de Aprovisionamiento → DHCP. Lo que faltaba era tenerlo dentro del panel y en orden, sin salir a leer un archivo del repo para entregar el ACS en un rango nuevo. Incluye el aviso que más tiempo de diagnóstico cuesta: la opción 43 solo dice **a dónde llamar** a un cliente TR-069 que ya esté corriendo, y si el equipo lo tiene apagado —típico en modo AP— no hay ajuste de DHCP que lo levante; la señal rápida es el puerto 7547 cerrado.
+
+El ejemplo usa una red de documentación (`192.0.2.0/24`) y un ACS en `10.20.30.5`, los mismos de DEPLOY.md. Una prueba saca del propio HTML la URL, las redes y la codificación, vuelve a generar el script con `app/dhcp_tr069.py` y exige que coincida línea a línea: un tutorial con comandos pegados a mano envejece en silencio cuando cambia el generador, y lo que se pega de ahí acaba en un router en producción.
 
 ## Panel: temas
 
@@ -309,7 +322,7 @@ En **Ajustes → Tema** se elige entre cuatro paletas: *Pizarra* (la de siempre)
 Una página con cuatro pestañas, que son la cara visible de todo lo anterior:
 
 - **Equipos nuevos**: bandeja de los que llegan sin tag, con el ISP sugerido y el motivo; tabla de rangos `CIDR → ISP`; y el interruptor entre sugerir y asignar solo.
-- **Perfiles de modelo**: catálogo por modelo+firmware con la evidencia de cada deducción, las correcciones manuales, y el botón de proponer mapeo con IA cuando hay proveedor configurado.
+- **Perfiles de modelo**: catálogo por modelo+firmware con la evidencia de cada deducción, las correcciones manuales, y el botón de proponer mapeo con IA cuando hay proveedor configurado — abre un modal donde se elige el equipo de una lista y se guardan las sugerencias que queden marcadas.
 - **Árboles**: tabla de modelos con las rutas de la unión, los equipos que aportaron y el aviso de árbol incompleto; al abrir uno, el detalle con buscador de rutas y descarga del árbol en JSON.
 - **DHCP / Option 43**: el generador del script para MikroTik, con vista previa, copiar y descargar `.rsc`.
 

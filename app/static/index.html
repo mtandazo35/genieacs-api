@@ -518,6 +518,28 @@
         <p class="muted small">Qué instancia es la WAN, la LAN y cada radio en cada modelo, deducido de su árbol. Se aprende al abrir la ficha de un equipo.</p>
         <div class="page-head"><h3>Catálogo</h3><button id="prof-refresh" class="ghost small">↻ Actualizar</button></div>
         <div id="prof-list"></div>
+
+        <dialog id="ia-modal" class="modal">
+          <div class="modal-body">
+            <div class="modal-head"><h3 id="ia-modal-titulo">Proponer mapeo con IA</h3>
+              <button type="button" id="ia-cerrar" class="ghost small" data-close>Cerrar</button>
+            </div>
+            <p class="muted small">Se le pregunta al modelo qué ruta corresponde a cada concepto que hoy no se resuelve solo. Al proveedor se le envían <b>rutas del árbol, nunca valores</b>, y nada se guarda hasta que marques las que quieras y pulses Guardar.</p>
+            <label>Equipo de este modelo
+              <select id="ia-dev"></select>
+            </label>
+            <p class="muted small">Hace falta un equipo de este modelo porque las rutas se leen de un equipo real. Entre paréntesis va su serial; el identificador con el que <b>GenieACS</b> lo conoce es <code>OUI-ProductClass-Serie</code> (acaba en ese mismo serial), lo forma el propio ACS y el panel lo envía por ti: no hay que copiarlo a mano.</p>
+            <div class="row">
+              <button type="button" id="ia-proponer">Proponer</button>
+            </div>
+            <div id="ia-estado" class="muted small"></div>
+            <div id="ia-sugerencias"></div>
+            <div class="modal-foot">
+              <button type="button" class="ghost" data-close>Cancelar</button>
+              <button type="button" id="ia-guardar" class="hidden">Guardar las marcadas</button>
+            </div>
+          </div>
+        </dialog>
       </div>
 
       <!-- ---- DHCP / Option 43 ---- -->
@@ -594,6 +616,7 @@
         <button class="subtab" data-ssub="tema">Tema</button>
         <button class="subtab admin-only hidden" data-ssub="acs">Conexión al ACS</button>
         <button class="subtab admin-only hidden" data-ssub="ia">Inteligencia artificial</button>
+        <button class="subtab admin-only hidden" data-ssub="dhcp">DHCP en MikroTik</button>
       </div>
 
       <div data-spanel="cuenta">
@@ -679,6 +702,71 @@
           <div id="llm-modelos-chips" class="chips"></div>
         </div>
       </form>
+      </div>
+
+      <div data-spanel="dhcp" class="hidden admin-only" id="tuto-dhcp">
+      <div class="card-form">
+        <h3>DHCP en MikroTik</h3>
+        <p class="muted small">Para que un CPE nuevo aparezca en <b>Equipos</b> sin que nadie entre a configurarlo, el router tiene que decirle dónde está el ACS en el momento en que le da la IP. Eso es la <b>opción 43</b> del DHCP. El panel no se conecta al router: los comandos los pegas tú, y el paso 4 deshace todo lo que ponen.</p>
+        <ol class="tuto">
+          <li>
+            <h4>Qué hace la opción 43 y por qué el equipo la pide</h4>
+            <p class="muted small">Al arrancar, el cliente TR-069 del CPE pide IP y se anuncia en la <b>opción 60</b> (su <i>vendor class</i>) como <code>dslforum.org</code>. El servidor DHCP le responde con la <b>opción 43</b>, y ahí va la URL del ACS: el equipo la guarda como su <i>ACS URL</i>, hace su primer <i>inform</i> y desde ese momento el panel lo lista. Así no hay que entrar equipo por equipo a escribir la URL.</p>
+            <p class="muted small"><b>Ojo con el límite:</b> la opción 43 solo le dice <i>a dónde llamar</i> a un cliente TR-069 que ya esté corriendo. Si el CPE trae el TR-069 <b>apagado</b> —típico en modo AP, o en algunos modelos tras un factory reset— ninguna opción DHCP lo va a despertar: eso se arregla <b>en el equipo</b> (activándolo en su interfaz web o pidiendo firmware con el ACS precargado), no en el router. Para saber en cuál de los dos casos estás, mira si el CPE tiene el <b>puerto 7547 abierto</b>: si está cerrado, su cliente TR-069 no está corriendo.</p>
+<pre id="tuto-dhcp-puerto"># desde el ACS, contra la IP del CPE
+timeout 3 bash -c "echo &gt; /dev/tcp/&lt;ip-del-cpe&gt;/7547" &amp;&amp; echo "cliente TR-069 activo" || echo "TR-069 apagado en el equipo"</pre>
+          </li>
+          <li>
+            <h4>Los comandos que se pegan en el MikroTik</h4>
+            <p class="muted small">Ejemplo completo para <b>RouterOS 7</b> con las tres codificaciones, una red de documentación (<code>192.0.2.0/24</code>) y un ACS en <code>10.20.30.5</code>. Hay tres porque el parque real no respeta el estándar por igual:</p>
+            <ul class="muted small">
+              <li><b>TLV</b> (opción 43): subopción 1 + longitud + URL. Es lo que dice TR-069.</li>
+              <li><b>URL plana</b> (opción 43): la URL tal cual, para los equipos baratos que no entienden el TLV.</li>
+              <li><b>Opción 125</b>: enterprise 3561 (BBF) envolviendo la misma subopción; la piden algunos Huawei y ONT en vez de la 43.</li>
+            </ul>
+            <p class="muted small">La opción 43 admite <b>un solo valor por cliente</b>: o TLV o plana. En <b>RouterOS 7</b> el <i>matcher</i> por la opción 60 permite dar TLV a quien se anuncia como <code>dslforum.org</code> y la plana al resto; en <b>RouterOS 6 no existen los matchers</b>, así que hay que elegir una — y si te apoyas en un matcher en la v6, no aplicará nada y <b>no avisará de nada</b>. El valor hexadecimal no es un número mágico: es <code>0x01</code> (subopción 1) + la longitud en bytes + la URL en hexadecimal, así que si cambias la URL <b>cambia también la longitud</b>: mejor generarlo (paso 5) que editarlo a mano. Estos comandos <b>no crean redes</b>: asignan el conjunto a redes que ya existen.</p>
+<pre id="tuto-dhcp-cmd">/ip dhcp-server option
+add code=43 name=tr069-genieacs-tlv value=0x0117687474703a2f2f31302e32302e33302e353a373534372f comment="tr069-genieacs (subopcion 1 = URL del ACS)"
+add code=43 name=tr069-genieacs-plana value="'http://10.20.30.5:7547/'" comment="tr069-genieacs (URL sin TLV)"
+add code=125 name=tr069-genieacs-125 value=0x00000de9190117687474703a2f2f31302e32302e33302e353a373534372f comment="tr069-genieacs (enterprise 3561)"
+
+/ip dhcp-server option sets
+add name=tr069-genieacs-tlv options=tr069-genieacs-tlv,tr069-genieacs-125 comment="tr069-genieacs"
+add name=tr069-genieacs-plana options=tr069-genieacs-plana,tr069-genieacs-125 comment="tr069-genieacs"
+
+# El CPE que se anuncia como dslforum.org entiende TLV; al resto se le da la URL plana.
+/ip dhcp-server matcher
+add name=tr069-genieacs-dslforum code=60 matching-type=substring value="dslforum.org" option-set=tr069-genieacs-tlv server=all comment="tr069-genieacs"
+
+# Se asigna a redes que YA existen; este script no crea ninguna red.
+/ip dhcp-server network
+set [find address="192.0.2.0/24"] dhcp-option-set=tr069-genieacs-plana</pre>
+            <button type="button" id="tuto-dhcp-copiar" class="ghost small">Copiar los comandos</button>
+          </li>
+          <li>
+            <h4>Comprobar que funciona</h4>
+            <p class="muted small">En el router, que las opciones estén puestas y que la red las entregue:</p>
+<pre id="tuto-dhcp-comprobar">/ip dhcp-server option print where name~"tr069-genieacs"
+/ip dhcp-server network print detail
+/ip dhcp-server lease print detail          # mira la opción 60 que anuncia cada CPE</pre>
+            <p class="muted small">En el <code>lease print detail</code> se ve la opción 60 que anuncia cada CPE: si ahí no aparece <code>dslforum.org</code>, ese equipo no está pidiendo la opción 43 y el matcher no le va a dar el TLV. Después, en el panel: el equipo sale en <b>Equipos</b> en cuanto hace su primer <i>inform</i>. Si no quieres esperar, reinicia el CPE para que renueve el DHCP; si aun así no aparece, vuelve al aviso del paso 1 (puerto 7547).</p>
+          </li>
+          <li>
+            <h4>Deshacerlo</h4>
+<pre id="tuto-dhcp-deshacer">/ip dhcp-server network
+set [find address="192.0.2.0/24"] dhcp-option-set=""
+/ip dhcp-server matcher remove [find comment="tr069-genieacs"]
+/ip dhcp-server option sets remove [find comment="tr069-genieacs"]
+/ip dhcp-server option remove [find comment~"tr069-genieacs"]</pre>
+            <p class="muted small">Todo lo que se crea aquí lleva el comentario <code>tr069-genieacs</code>, así que ese bloque borra eso y nada más. Los equipos que ya guardaron la URL del ACS la conservan: quitar la opción solo deja de entregarla a los nuevos.</p>
+          </li>
+          <li>
+            <h4>Generarlo con tus rangos reales</h4>
+            <p class="muted small">Lo de arriba es un ejemplo con una red y un ACS de documentación. El generador del panel hace el mismo script con tu URL del ACS, tu versión de RouterOS y tus redes, calcula el hexadecimal por ti y trae su propio bloque para deshacerlo.</p>
+            <button type="button" id="tuto-dhcp-ir" class="ghost small">Abrir el generador (Aprovisionamiento → DHCP)</button>
+          </li>
+        </ol>
+      </div>
       </div>
     </section>
   </main>
