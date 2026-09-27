@@ -164,6 +164,17 @@ def test_se_puede_probar_una_clave_sin_haberla_guardado(client, admin_h, monkeyp
     assert client.get("/settings/llm", headers=admin_h).json()["key_set"] is False
 
 
+def test_una_clave_pegada_con_espacios_se_recorta(client, admin_h, monkeypatch):
+    """Copiar la clave del navegador suele arrastrar un salto de linea; recortarla
+    al guardar y no al probar daba un 401 que no era del proveedor."""
+    visto = []
+    proveedor(monkeypatch, visto=visto)
+    r = client.post("/settings/llm/test", headers=admin_h,
+                    json={"api_key": "  gsk-con-espacios\n"}).json()
+    assert r["ok"] is True
+    assert {a for _m, _u, a in visto} == {"Bearer gsk-con-espacios"}
+
+
 def test_probar_sin_cuerpo_sigue_usando_la_guardada(client, admin_h, guardada, monkeypatch):
     proveedor(monkeypatch)
     assert client.post("/settings/llm/test", headers=admin_h).json()["ok"] is True

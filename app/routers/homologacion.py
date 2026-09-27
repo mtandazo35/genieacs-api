@@ -9,13 +9,15 @@ La propuesta no se aplica sola. Se verifica contra el arbol del equipo:
 - se lee su valor actual y se muestra, para que una persona confirme,
 - solo al confirmar se guarda como correccion en el catalogo del modelo.
 """
+import json
 import logging
+import time
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from .. import catalog, llm
-from ..deps import require_admin
+from .. import catalog, db, llm, runtime
+from ..deps import CurrentUser, require_admin
 from ..genieacs import genie
 from ..parammap import pick_map
 from ..treeprofile import effective_params, flatten
@@ -42,8 +44,25 @@ async def estado():
     return {"disponible": llm.configurado()}
 
 
+@router.get("/log")
+async def registro(limit: int = Query(100, ge=1, le=500),
+                   tipo: str | None = Query(None, max_length=32)):
+    """Que ha hecho la IA: cada propuesta con lo que respondio, cada confirmacion
+    y cada prueba de conexion. El registro de auditoria general solo ve la
+    peticion; aqui esta la respuesta."""
+    filas = []
+    for f in db.list_ia_eventos(limit, tipo):
+        try:
+            f["detalle"] = json.loads(f["detalle"]) if f.get("detalle") else {}
+        except ValueError:
+            f["detalle"] = {}
+        f["ok"] = bool(f["ok"])
+        filas.append(f)
+    return filas
+
+
 @router.post("/proponer")
-async def proponer(body: ProponerIn):
+async def proponer(body: ProponerIn, user: CurrentUser = Depends(require_admin)):
     """Pide al modelo el mapeo de los conceptos que hoy quedan sin resolver.
 
     Solo salen del servidor RUTAS y tipos, nunca valores: el mapeo no necesita
@@ -68,17 +87,37 @@ async def proponer(body: ProponerIn):
     # registrar el perfil del modelo: sin el, no habria donde guardar la correccion
     key, _perfil = catalog.recordar(doc)
     identidad = catalog.identidad(doc)
+    cfg = runtime.llm_config()
+    # con el preset, base_url viene vacio: el destino real lo sabe llm.py
+    destino = cfg.get("base_url") or llm.PROVEEDORES.get(
+        cfg.get("provider"), llm.PROVEEDORES["groq"])[0]
+    empezo = time.monotonic()
     try:
         propuesta = await llm.proponer_mapeo(faltan, rutas, str(identidad.get("model")))
     except llm.LLMNoConfigurado as e:
         raise HTTPException(400, str(e))
     except Exception as e:
         log.exception("la propuesta de mapeo fallo")
+        db.log_ia("propuesta", user=user.username, model_key=key, device_id=body.device_id,
+                  proveedor=destino, modelo_ia=cfg.get("model"),
+                  detalle=json.dumps({"pedidos": faltan, "rutas_enviadas": len(rutas)}),
+                  ok=False, ms=int((time.monotonic() - empezo) * 1000),
+                  error=f"{type(e).__name__}: {e}"[:300])
         raise HTTPException(502, f"El proveedor de IA no respondio: {type(e).__name__}")
 
     valores = {p: v for p, v, _w in parametros}
     sugerencias = [{"concept": c, "path": ruta, "valor_actual": valores.get(ruta)}
                    for c, ruta in propuesta["mapeo"].items()]
+    # queda constancia de lo que propuso: conceptos y rutas, sin los valores que
+    # se muestran al revisar (ahi van el SSID y la clave del abonado)
+    db.log_ia("propuesta", user=user.username, model_key=key, device_id=body.device_id,
+              proveedor=propuesta.get("proveedor") or destino,
+              modelo_ia=propuesta.get("modelo"),
+              detalle=json.dumps({"pedidos": faltan, "rutas_enviadas": len(rutas),
+                                  "propuesto": propuesta["mapeo"],
+                                  "descartadas": propuesta["descartadas"],
+                                  "dudas": propuesta["dudas"]}, ensure_ascii=False),
+              ms=int((time.monotonic() - empezo) * 1000))
     return {"ok": True, "key": key, "faltan": faltan,
             "sugerencias": sugerencias, "descartadas": propuesta["descartadas"],
             "dudas": propuesta["dudas"], "modelo_ia": propuesta["modelo"],
@@ -86,9 +125,13 @@ async def proponer(body: ProponerIn):
 
 
 @router.post("/confirmar")
-async def confirmar(body: ConfirmarIn):
+async def confirmar(body: ConfirmarIn, user: CurrentUser = Depends(require_admin)):
     """Guarda una sugerencia como correccion del catalogo (tras revisarla)."""
     if not catalog.db.get_model_profile(body.key):
         raise HTTPException(404, "Perfil de modelo no encontrado")
     over = catalog.set_override(body.key, body.concept, body.path)
+    # lo que de verdad cambio el catalogo: una propuesta sin confirmar no cuenta
+    db.log_ia("confirmacion", user=user.username, model_key=body.key,
+              detalle=json.dumps({"concepto": body.concept, "ruta": body.path},
+                                 ensure_ascii=False))
     return {"ok": True, "overrides": over}

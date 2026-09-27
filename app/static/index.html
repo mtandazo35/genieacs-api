@@ -318,12 +318,40 @@
 
     <!-- Actividad / auditoría (solo admin) -->
     <section id="audit-page" class="hidden">
-      <div class="page-head"><h2>Actividad</h2><button id="audit-refresh" class="ghost">↻ Actualizar</button></div>
-      <input id="audit-filter" class="filter" placeholder="Filtrar por usuario, acción o equipo…">
-      <div class="tbl-wrap">
-        <table class="tbl" id="audit-table"><thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Equipo</th><th>Estado</th></tr></thead><tbody></tbody></table>
+      <div class="page-head"><h2>Actividad</h2></div>
+      <div class="subtabs" id="audit-tabs">
+        <button class="subtab active" data-asub="todo">Registro general</button>
+        <button class="subtab" data-asub="ia">Qué hizo la IA</button>
+      </div>
+
+      <!-- ---- registro general: la tabla de auditoría de siempre ---- -->
+      <div data-apanel="todo">
+        <div class="page-head"><h3>Peticiones al panel</h3><button id="audit-refresh" class="ghost">↻ Actualizar</button></div>
+        <input id="audit-filter" class="filter" placeholder="Filtrar por usuario, acción o equipo…">
+        <div class="tbl-wrap">
+          <table class="tbl" id="audit-table"><thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Equipo</th><th>Estado</th></tr></thead><tbody></tbody></table>
         </div>
-      <div id="audit-pager" class="pager"></div>
+        <div id="audit-pager" class="pager"></div>
+      </div>
+
+      <!-- ---- lo que hizo la IA: el registro general solo ve la petición ---- -->
+      <div data-apanel="ia" class="hidden">
+        <p class="muted small">Qué le pidió el panel al modelo de lenguaje y qué respondió: el mapeo que propuso, las rutas que se inventó y el servidor descartó, lo que acabó confirmándose en el catálogo y las pruebas del proveedor. Se registran conceptos y rutas, <b>nunca valores</b>.</p>
+        <div class="page-head">
+          <h3>Propuestas, confirmaciones y pruebas</h3>
+          <div class="ia-filtro">
+            <label for="ia-log-tipo">Tipo</label>
+            <select id="ia-log-tipo">
+              <option value="todos">Todos</option>
+              <option value="propuesta">Propuesta</option>
+              <option value="confirmacion">Confirmación</option>
+              <option value="prueba">Prueba</option>
+            </select>
+            <button id="ia-log-refresh" class="ghost">↻ Actualizar</button>
+          </div>
+        </div>
+        <div id="ia-log-list"></div>
+      </div>
     </section>
 
     <!-- Mi cuenta (todos) -->
@@ -435,6 +463,7 @@
         <button class="subtab active" data-psub="nuevos">Equipos nuevos</button>
         <button class="subtab" data-psub="perfiles">Perfiles de modelo</button>
         <button class="subtab" data-psub="dhcp">DHCP / Option 43</button>
+        <button class="subtab" data-psub="arboles">Árboles</button>
       </div>
 
       <!-- ---- equipos nuevos ---- -->
@@ -533,6 +562,28 @@
           <button type="button" id="dhcp-copy" class="ghost small">Copiar</button>
           <button type="button" id="dhcp-download" class="ghost small">Descargar .rsc</button>
         </div>
+      </div>
+
+      <!-- ---- árboles por modelo ---- -->
+      <div data-ppanel="arboles" class="hidden">
+        <p class="muted small">Qué parámetros expone cada modelo, sin tener un equipo delante. Se aprende al abrir la ficha de un equipo y se guarda la <b>unión</b> de las rutas de todos los equipos de ese modelo: se guardan las rutas y si son escribibles, nunca los valores.</p>
+        <div class="page-head"><h3>Modelos con árbol guardado</h3><button id="arb-refresh" class="ghost small">↻ Actualizar</button></div>
+        <div id="arb-list"></div>
+
+        <dialog id="arb-modal" class="modal">
+          <div class="modal-body">
+            <div class="modal-head"><h3 id="arb-modal-titulo">Rutas del modelo</h3>
+              <button type="button" id="arb-cerrar" class="ghost small" data-close>Cerrar</button>
+            </div>
+            <div class="row" style="align-items:flex-end">
+              <label style="flex:2">Buscar ruta<input id="arb-buscar" placeholder="p.ej. WLAN, SSID, X_"></label>
+              <label class="chk"><input type="checkbox" id="arb-solo-escribibles"> Solo escribibles</label>
+              <button type="button" id="arb-descargar" class="ghost">Descargar JSON</button>
+            </div>
+            <div id="arb-total" class="muted small"></div>
+            <div id="arb-paths" class="adv-list"></div>
+          </div>
+        </dialog>
       </div>
     </section>
 

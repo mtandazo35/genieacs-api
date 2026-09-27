@@ -3,6 +3,7 @@
 Permite cambiar a que GenieACS apunta la API (NBI URL) sin editar ficheros ni
 reiniciar: el valor se guarda en la BD y el cliente lo lee en cada llamada.
 """
+import json
 import time
 
 import httpx
@@ -12,7 +13,7 @@ from typing import Optional
 
 from .. import db, llm, runtime
 from ..config import get_settings as app_settings
-from ..deps import require_admin
+from ..deps import CurrentUser, require_admin
 from ..netguard import BlockedURL, check_allowed_url, parse_networks
 
 router = APIRouter(prefix="/settings", tags=["settings"], dependencies=[Depends(require_admin)])
@@ -123,28 +124,47 @@ async def set_llm(body: LLMIn):
 
 
 @router.post("/llm/test")
-async def test_llm(body: LLMIn | None = None):
+async def test_llm(body: LLMIn | None = None, user: CurrentUser = Depends(require_admin)):
     """Prueba la configuracion. Si se manda una en el cuerpo, se prueba ESA sin
     guardarla: si no, habria que guardar una clave para descubrir que no sirve."""
     cfg, aviso_url = None, None
     if body and (body.api_key or body.base_url or body.model or body.provider):
         guardada = runtime.llm_config()
         cfg = {"provider": body.provider or guardada["provider"],
-               "api_key": body.api_key or guardada["api_key"],
+               # .strip() igual que al guardar: pegar la clave con un salto de
+               # linea daba un 401 en Probar y luego funcionaba al Guardar
+               "api_key": (body.api_key or "").strip() or guardada["api_key"],
                "model": (body.model if body.model is not None else guardada["model"]),
                "base_url": (body.base_url if body.base_url is not None else guardada["base_url"])}
         cfg["base_url"], aviso_url, error = _normalizar_url(cfg["base_url"])
         if error:
             return {"ok": False, "error": error}
+    t0 = time.monotonic()
     try:
         res = await llm.probar(cfg)
         if cfg and aviso_url:
             res["aviso"] = aviso_url
-        return res
     except llm.LLMNoConfigurado as e:
-        return {"ok": False, "error": str(e)}
+        res = {"ok": False, "error": str(e)}
     except Exception as e:
-        return {"ok": False, "error": f"No se pudo contactar con el proveedor ({type(e).__name__})"}
+        res = {"ok": False, "error": f"No se pudo contactar con el proveedor ({type(e).__name__})"}
+    # queda anotado que se probo, con que y como fue: el registro de auditoria
+    # dice "configuro el proveedor de IA" y no distingue una prueba fallida
+    _registrar_prueba(user, cfg, res, int((time.monotonic() - t0) * 1000))
+    return res
+
+
+def _registrar_prueba(user, cfg, res: dict, ms: int) -> None:
+    """Nunca la clave: solo proveedor, modelo y el motivo del fallo."""
+    efectiva = cfg or runtime.llm_config()
+    detalle = {"modelos_del_proveedor": len(res.get("modelos") or [])}
+    if res.get("aviso"):
+        detalle["aviso"] = res["aviso"]
+    db.log_ia("prueba", user=getattr(user, "username", None),
+              proveedor=res.get("proveedor") or efectiva.get("base_url"),
+              modelo_ia=res.get("modelo") or efectiva.get("model"),
+              detalle=json.dumps(detalle, ensure_ascii=False),
+              ok=bool(res.get("ok")), ms=ms, error=(res.get("error") or None))
 
 
 @router.post("/test")

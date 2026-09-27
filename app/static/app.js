@@ -15,13 +15,14 @@ function toast(msg, kind = "info") {
   setTimeout(() => t.classList.add("hidden"), 3500);
 }
 
-async function api(path, { method = "GET", body = null, form = null } = {}) {
+// signal: para peticiones que se pueden quedar obsoletas (filtros que se teclean)
+async function api(path, { method = "GET", body = null, form = null, signal = null } = {}) {
   const headers = {};
   if (S.token) headers["Authorization"] = "Bearer " + S.token;
   let payload = null;
   if (form) { payload = form; }
   else if (body) { headers["Content-Type"] = "application/json"; payload = JSON.stringify(body); }
-  const res = await fetch(path, { method, headers, body: payload });
+  const res = await fetch(path, { method, headers, body: payload, signal });
   if (res.status === 401) { logout(); throw new Error("Sesión expirada"); }
   let data = null;
   try { data = await res.json(); } catch { /* sin cuerpo */ }
@@ -38,7 +39,13 @@ async function api(path, { method = "GET", body = null, form = null } = {}) {
 const enc = (id) => encodeURIComponent(id);
 
 // ===== Auth =====
-function showLogin() { $("#login-view").classList.remove("hidden"); $("#app-view").classList.add("hidden"); }
+// un <dialog> abierto deja el resto del documento inerte: si la sesion caduca
+// con un modal delante, ocultar el panel no basta y la pagina queda muerta
+function cerrarDialogos() {
+  $$("dialog[open]").forEach(d => { try { d.close(); } catch { /* ya cerrado */ } });
+}
+
+function showLogin() { cerrarDialogos(); $("#login-view").classList.remove("hidden"); $("#app-view").classList.add("hidden"); }
 function showApp() { $("#login-view").classList.add("hidden"); $("#app-view").classList.remove("hidden"); }
 
 function logout() {
@@ -80,7 +87,7 @@ function navigate(nav) {
   if (nav === "settings") abrirAjustes();
   if (nav === "prov") loadProv();
   if (nav === "updates") loadUpdates();
-  if (nav === "audit") loadAudit();
+  if (nav === "audit") abrirActividad();
 }
 $$("[data-nav]").forEach(a => a.addEventListener("click", (e) => { e.preventDefault(); navigate(a.dataset.nav); }));
 
@@ -833,6 +840,168 @@ function renderAudit() {
 $("#audit-filter").addEventListener("input", () => { auditPage = 0; renderAudit(); });
 $("#audit-refresh").addEventListener("click", loadAudit);
 
+// ---- subpestañas de Actividad (registro general / lo que hizo la IA) ----
+// acotado a #audit-page: un manejador global esconderia los paneles de Ajustes
+// y de Aprovisionamiento, que usan el mismo patron con otro data-*
+function mostrarSubAudit(sub) {
+  $$("#audit-page [data-asub]").forEach(x => x.classList.toggle("active", x.dataset.asub === sub));
+  $$("#audit-page [data-apanel]").forEach(p => p.classList.toggle("hidden", p.dataset.apanel !== sub));
+  if (sub === "todo") loadAudit();
+  if (sub === "ia") loadIaLog();
+}
+
+$("#audit-page").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-asub]");
+  if (b) mostrarSubAudit(b.dataset.asub);
+});
+
+function abrirActividad() {
+  const activa = $$("#audit-page [data-asub]").find(b => b.classList.contains("active"));
+  mostrarSubAudit(activa ? activa.dataset.asub : "todo");
+}
+
+// ---- que hizo la IA ----
+// El registro de auditoria general solo anota que alguien pidio algo; esto es la
+// respuesta del modelo: el mapeo propuesto, lo que se invento y no se guardo, y
+// lo que acabo en el catalogo.
+const IA_TIPO = { propuesta: "Propuesta", confirmacion: "Confirmación", prueba: "Prueba" };
+let iaLogCache = [];
+
+// la clave del modelo es fabricante|clase|modelo|firmware: en la tabla solo cabe
+// "fabricante modelo" y la clave entera se queda en el title
+function iaModeloCpe(key) {
+  const [fab, , modelo] = String(key || "").split("|");
+  return `${fab || "?"} ${modelo || "?"}`;
+}
+// del base_url interesa de quien es, no la ruta entera del API
+function iaProveedor(url) {
+  if (!url) return "";
+  try { return new URL(url).host; } catch { return String(url); }
+}
+// una confirmacion la hace el panel, no el modelo: no es que "respondiera"
+function iaResultado(ev) {
+  if (!ev.ok) return "⚠ falló";
+  return ev.tipo === "confirmacion" ? "✅ guardado" : "✅ respondió";
+}
+function iaEquipo(id) {
+  const d = (S.devices || []).find(x => x.id === id);
+  return d && d.name ? d.name : (id || "");
+}
+// concepto -> ruta, con la ruta en monoespaciado (igual que las correcciones
+// del catalogo en Perfiles de modelo)
+function iaMapeo(pares) {
+  return `<dl class="prof-dl">` + pares.map(([c, ruta]) =>
+    `<div><dt>${esc(c)}</dt><dd><code>${esc(ruta)}</code></dd></div>`).join("") + `</dl>`;
+}
+function iaRutas(lista) {
+  return `<div class="adv-list">` + lista.map(x => {
+    const par = Array.isArray(x) ? x : [null, x];
+    return `<div class="adv-row">
+      <div class="adv-path">${esc(par[1])}</div>
+      <div class="adv-val muted small">${esc(par[0] || "")}</div></div>`;
+  }).join("") + `</div>`;
+}
+
+function iaDetalle(ev) {
+  const d = ev.detalle || {};
+  const partes = [];
+  if (ev.tipo === "propuesta") {
+    const pedidos = d.pedidos || [];
+    const propuesto = Object.entries(d.propuesto || {});
+    const descartadas = d.descartadas || [];
+    const dudas = Array.isArray(d.dudas) ? d.dudas : (d.dudas ? [d.dudas] : []);
+    partes.push(`<p class="small muted">Se le pidieron ${pedidos.length} concepto(s)${pedidos.length ? ": " + esc(pedidos.join(", ")) : ""}, con ${d.rutas_enviadas ?? "?"} rutas del árbol del modelo como única información (rutas, nunca valores).</p>`);
+    if (propuesto.length) {
+      partes.push(`<h5 class="ia-tit">Mapeo propuesto <span class="muted small">(${propuesto.length}; nada se aplica sin confirmarlo)</span></h5>`);
+      partes.push(iaMapeo(propuesto));
+    } else if (ev.ok) {
+      partes.push(`<p class="small muted">El modelo no propuso ninguna ruta válida.</p>`);
+    }
+    if (descartadas.length) {
+      partes.push(`<h5 class="ia-tit">${descartadas.length} ruta(s) descartadas
+        <span class="tag-warn" title="El modelo devolvió rutas que no están en el árbol de ese modelo: se las inventó. El servidor las descarta y no llegan al catálogo.">inventadas</span></h5>`);
+      partes.push(iaRutas(descartadas));
+    } else if (propuesto.length) {
+      partes.push(`<p class="small muted">Ninguna ruta descartada: todo lo que devolvió existía en el árbol.</p>`);
+    }
+    if (dudas.length) {
+      partes.push(`<h5 class="ia-tit">Dudas que dejó por escrito</h5>
+        <ul class="small ia-dudas">` + dudas.map(x => `<li>${esc(x)}</li>`).join("") + `</ul>`);
+    }
+  } else if (ev.tipo === "confirmacion") {
+    partes.push(`<p class="small muted">Guardado como corrección del catálogo para este modelo:</p>`);
+    partes.push(iaMapeo([[d.concepto || "?", d.ruta || "?"]]));
+  } else if (ev.tipo === "prueba") {
+    partes.push(`<p class="small muted">${ev.ok
+      ? `El proveedor respondió con ${d.modelos_del_proveedor ?? "?"} modelo(s) disponibles.`
+      : `El proveedor no respondió.`}</p>`);
+    if (d.aviso) partes.push(`<p class="small muted">Aviso: ${esc(d.aviso)}</p>`);
+  } else if (Object.keys(d).length) {
+    partes.push(`<pre class="ia-json small">${esc(JSON.stringify(d, null, 2))}</pre>`);
+  }
+  if (!ev.ok && ev.error) {
+    partes.push(`<p class="small ia-error">Error del proveedor: <code>${esc(ev.error)}</code></p>`);
+  }
+  if (!partes.length) partes.push(`<p class="small muted">Sin detalle registrado.</p>`);
+  const titulo = ev.tipo === "confirmacion" ? "Ver qué se guardó"
+               : ev.tipo === "prueba" ? "Ver el detalle de la prueba"
+               : "Ver qué respondió la IA";
+  return `<details><summary class="small">${titulo}</summary>
+    <div class="ia-cuerpo">${partes.join("")}</div></details>`;
+}
+
+async function loadIaLog() {
+  const lista = $("#ia-log-list");
+  const tipo = $("#ia-log-tipo").value;
+  lista.innerHTML = `<p class="muted">Cargando…</p>`;
+  try {
+    iaLogCache = await api("/homologacion/log?limit=100"
+      + (tipo && tipo !== "todos" ? "&tipo=" + encodeURIComponent(tipo) : ""));
+    renderIaLog();
+  } catch (e) {
+    lista.innerHTML = `<p class="muted">${esc(e.message)}</p>`;
+    toast(e.message, "err");
+  }
+}
+
+function renderIaLog() {
+  const lista = $("#ia-log-list");
+  if (!iaLogCache.length) {
+    lista.innerHTML = `<p class="muted">Todavía no hay nada registrado. Aparece una entrada cada vez que se pulsa
+      <b>Proponer mapeo con IA</b> (Aprovisionamiento → Perfiles de modelo), cada vez que se confirma una de las rutas
+      propuestas y cada vez que se pulsa <b>Probar</b> en Ajustes → Inteligencia artificial.</p>`;
+    return;
+  }
+  // un <tbody> por entrada: la fila de detalle va debajo de la suya y se queda
+  // con ella al desplegarse
+  lista.innerHTML = `<div class="tbl-wrap"><table class="tbl" id="ia-log-table">
+    <thead><tr><th>Fecha</th><th>Usuario</th><th>Tipo</th><th>Modelo de CPE</th>
+      <th>Proveedor / modelo</th><th class="num">ms</th><th>Resultado</th></tr></thead>`
+    + iaLogCache.map(ev => {
+      const equipo = iaEquipo(ev.device_id);
+      return `<tbody>
+      <tr>
+        <td class="small">${esc(fmtAuditDate(ev.ts))}</td>
+        <td>${esc(ev.user || "?")}</td>
+        <td>${esc(IA_TIPO[ev.tipo] || ev.tipo || "?")}</td>
+        <td>${ev.model_key
+              ? `<span title="${escAttr(ev.model_key)}">${esc(iaModeloCpe(ev.model_key))}</span>`
+              : `<span class="muted">—</span>`}
+            ${equipo ? `<br><span class="muted small">${esc(equipo)}</span>` : ""}</td>
+        <td class="small">${ev.proveedor || ev.modelo_ia
+              ? `${esc(iaProveedor(ev.proveedor) || "?")}<br><span class="muted">${esc(ev.modelo_ia || "modelo por defecto")}</span>`
+              : `<span class="muted">—</span>`}</td>
+        <td class="num">${ev.ms == null ? `<span class="muted">—</span>` : ev.ms}</td>
+        <td>${iaResultado(ev)}</td>
+      </tr>
+      <tr><td colspan="7" class="ia-det">${iaDetalle(ev)}</td></tr>
+    </tbody>`;
+    }).join("") + `</table></div>`;
+}
+
+$("#ia-log-refresh").addEventListener("click", loadIaLog);
+$("#ia-log-tipo").addEventListener("change", loadIaLog);
+
 async function loadAccount() {
   try {
     const me = await api("/auth/me");
@@ -1205,6 +1374,7 @@ function mostrarSubProv(sub) {
   $$("#prov-page [data-ppanel]").forEach(p => p.classList.toggle("hidden", p.dataset.ppanel !== sub));
   if (sub === "perfiles") loadPerfiles();
   if (sub === "dhcp") loadDhcpDefaults();
+  if (sub === "arboles") loadArboles();
 }
 
 $("#prov-page").addEventListener("click", (e) => {
@@ -1345,6 +1515,153 @@ $("#prof-list").addEventListener("click", async (e) => {
     finally { ia.disabled = false; ia.textContent = prev; }
   }
 });
+
+// ---- arboles por modelo ----
+// La union de las rutas TR-069 de todos los equipos de un modelo. Aqui solo se
+// consulta: los arboles se aprenden solos al abrir la ficha de un equipo.
+let arbActual = null;    // {key, titulo, archivo} del modelo abierto en el modal
+let arbTimer = null;     // debounce del filtro de rutas
+let arbPeticion = null;  // AbortController de la peticion de rutas en vuelo
+
+async function loadArboles() {
+  try {
+    const filas = await api("/trees");
+    if (!filas.length) {
+      $("#arb-list").innerHTML = `<p class="muted">Todavía no hay ningún árbol guardado: abre la ficha de un equipo y su modelo aparecerá aquí.</p>`;
+      return;
+    }
+    $("#arb-list").innerHTML = `<div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>Modelo</th><th>FW</th><th>Raíz</th><th class="num">Rutas</th><th class="num">Equipos</th><th>Actualizado</th><th>Acciones</th></tr></thead>
+      <tbody>` + filas.map(f => {
+        // tres estados, como las capacidades por modelo en la ficha: si / no /
+        // todavia no se sabe. null NO es "completo": es que no consta ningun
+        // equipo con el que comparar, y decir "completo" seria mentir
+        const aviso = f.incompleto === true
+          ? ` <span class="tag-warn" title="Ningún equipo de este modelo ha reportado el árbol completo: entre todos suman ${f.n_params} rutas y el más completo trajo ${f.max_equipo}. La unión sabe más que cualquiera de ellos por separado.">a medias</span>`
+          : f.incompleto == null
+          ? ` <span class="tag-none" title="Aún no se sabe: todavía no consta ningún equipo aportando rutas a este modelo, así que no hay con qué comparar la unión. Abre la ficha de un equipo de este modelo y se sabrá.">sin datos</span>`
+          : "";
+        return `<tr>
+          <td>${esc(f.manufacturer || "?")} ${esc(f.model || "?")}${aviso}
+            <br><span class="muted small">${esc(f.product_class || "")}</span></td>
+          <td class="muted small" title="${escAttr(f.firmware || "")}">${esc(recortar(f.firmware, 22))}</td>
+          <td><code>${esc(f.root || "?")}</code></td>
+          <td class="num">${f.n_params ?? "?"}</td>
+          <td class="num">${f.devices ?? "?"}</td>
+          <td class="muted small">${fmtFecha(f.updated_at)}</td>
+          <td><button class="ghost small" data-arb="${escAttr(f.key)}">Ver rutas</button></td>
+        </tr>`;
+      }).join("") + `</tbody></table></div>`;
+  } catch (e) { toast(e.message, "err"); }
+}
+
+$("#arb-refresh").addEventListener("click", loadArboles);
+
+$("#arb-list").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-arb]");
+  if (b) abrirArbol(b.dataset.arb);
+});
+
+// la clave es fabricante|clase|modelo|firmware: de ahi sale el titulo del modal
+async function abrirArbol(key) {
+  arbCancelar();   // por si quedaba algo en vuelo del modelo anterior
+  const [fab, , modelo] = String(key).split("|");
+  arbActual = { key, titulo: `${fab || "?"} ${modelo || "?"}`,
+                archivo: nombreArchivo(`${fab || ""}-${modelo || ""}`) };
+  $("#arb-modal-titulo").textContent = "Rutas de " + arbActual.titulo;
+  $("#arb-buscar").value = "";
+  $("#arb-solo-escribibles").checked = false;
+  $("#arb-total").textContent = "Cargando…";
+  $("#arb-paths").innerHTML = "";
+  abrirModal("#arb-modal");
+  await pintarRutas();
+}
+
+// al cerrar el modal: fuera el debounce pendiente y fuera la peticion en vuelo.
+// Si no, un timer disparado despues repinta un modal cerrado (y con la clave del
+// modelo que ya nadie esta mirando)
+function arbCancelar() {
+  clearTimeout(arbTimer);
+  arbTimer = null;
+  if (arbPeticion) { arbPeticion.abort(); arbPeticion = null; }
+}
+
+// el filtro va en el servidor: son cientos o miles de rutas por modelo
+async function pintarRutas() {
+  if (!arbActual) return;
+  const key = arbActual.key;
+  const p = new URLSearchParams();
+  const q = $("#arb-buscar").value.trim();
+  if (q) p.set("q", q);
+  if ($("#arb-solo-escribibles").checked) p.set("escribibles", "true");
+  const qs = p.toString();
+  // teclear en el buscador lanza una peticion cada 300 ms: la anterior se aborta
+  // para que una respuesta lenta no pise a la de la ultima tecla
+  if (arbPeticion) arbPeticion.abort();
+  const ctrl = new AbortController();
+  arbPeticion = ctrl;
+  const vigente = () => !ctrl.signal.aborted && arbActual && arbActual.key === key;
+  try {
+    const r = await api(`/trees/${encodeURIComponent(key)}` + (qs ? "?" + qs : ""),
+                        { signal: ctrl.signal });
+    if (!vigente()) return;
+    const rutas = r.paths || [];
+    $("#arb-paths").innerHTML = rutas.length
+      ? rutas.map(x => `<div class="adv-row">
+          <div class="adv-path">${esc(x.path)}${x.writable ? `<span class="w" title="escribible">✎</span>` : ""}</div>
+          <div class="adv-val muted small">${x.writable ? "escribible" : "solo lectura"}</div></div>`).join("")
+      : `<div class="muted" style="padding:.8rem">Ninguna ruta coincide con ese filtro.</div>`;
+    const equipos = (r.equipos || []).length;
+    // `total` es DESPUES de filtrar: decir "10 de 10" en un modelo de 34 rutas
+    // engana, asi que el total del modelo (n_params) se dice siempre
+    const filtrando = r.total !== r.n_params;
+    $("#arb-total").textContent =
+      (filtrando ? `${rutas.length} de ${r.total} que coinciden · ${r.n_params} rutas en el modelo`
+                 : `${rutas.length} de ${r.n_params} rutas`)
+      + (equipos ? ` · ${equipos} equipo(s) han aportado` : "")
+      + (r.truncado ? " · lista recortada: afina el filtro o descarga el JSON con todas" : "");
+  } catch (e) {
+    if (e.name === "AbortError" || !vigente()) return;   // la abortamos nosotros
+    $("#arb-total").textContent = e.message;
+    toast(e.message, "err");
+  } finally {
+    if (arbPeticion === ctrl) arbPeticion = null;
+  }
+}
+
+$("#arb-buscar").addEventListener("input", () => {
+  clearTimeout(arbTimer);
+  arbTimer = setTimeout(pintarRutas, 300);
+});
+$("#arb-solo-escribibles").addEventListener("change", pintarRutas);
+
+// vale para Esc, el boton Cerrar, el clic en el fondo y el cierre forzado al
+// caducar la sesion: el evento nativo 'close' los cubre todos
+$("#arb-modal").addEventListener("close", () => { arbCancelar(); arbActual = null; });
+
+// la descarga pide limit=0: el .json lleva TODAS las rutas, no las de la vista.
+// Con limit=0 el servidor NO devuelve `equipos` (no saca seriales de varios ISP a
+// un archivo) y aqui no hace falta: se volcan las rutas tal cual llegan.
+$("#arb-descargar").addEventListener("click", async () => {
+  if (!arbActual) return;
+  const b = $("#arb-descargar");
+  b.disabled = true;
+  try {
+    const r = await api(`/trees/${encodeURIComponent(arbActual.key)}?limit=0`);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(r, null, 2)], { type: "application/json" }));
+    a.download = `arbol-${arbActual.archivo}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (e) { toast(e.message, "err"); }
+  finally { b.disabled = false; }
+});
+
+// nombre de archivo a partir del modelo: sin tildes ni nada que moleste al SO
+function nombreArchivo(s) {
+  return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "modelo";
+}
 
 // ---- DHCP / Option 43 ----
 function filaRed(v = {}) {
