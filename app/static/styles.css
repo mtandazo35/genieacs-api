@@ -320,6 +320,18 @@ main{width:100%;max-width:1760px;margin:0 auto;padding:1.5rem clamp(1rem,2.5vw,2
 .prof-meta span{white-space:nowrap}
 .prof-fw{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
+/* arboles por modelo: el listado de rutas necesita mas ancho que un formulario,
+   y el modal no es un <form>, asi que lleva su propio relleno */
+#arb-modal{width:min(900px,calc(100vw - 2rem))}
+.modal-body{padding:1.2rem 1.3rem 1.3rem}
+#arb-paths{margin-top:.6rem}
+/* aviso ambar en linea: el mismo tag de la ficha pero en tono de advertencia */
+.tag-warn{background:var(--warn-weak);border:1px solid var(--warn);color:var(--warn);
+  padding:.15rem .5rem;border-radius:6px;font-size:.75rem;white-space:nowrap;cursor:help}
+/* tercer estado: no es "bien" ni "aviso", es que todavia no se sabe -> gris */
+.tag-none{background:var(--bg2);border:1px solid var(--line);color:var(--muted);
+  padding:.15rem .5rem;border-radius:6px;font-size:.75rem;white-space:nowrap;cursor:help}
+
 /* el generador de DHCP: formulario ancho y script a continuacion */
 #dhcp-form{max-width:none}
 #dhcp-script{margin-top:1rem;padding:1rem;font-size:.82rem;line-height:1.5;
@@ -354,3 +366,26 @@ main{width:100%;max-width:1760px;margin:0 auto;padding:1.5rem clamp(1rem,2.5vw,2
   border-radius:999px;padding:.2rem .7rem;cursor:pointer;
   font-size:.78rem;font-family:ui-monospace,monospace}
 .chip:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ---------- registro de la IA (Actividad -> Que hizo la IA) ----------
+   Cada entrada son dos filas: el resumen y, debajo, el detalle plegado. La fila
+   del detalle es un td[colspan], que por defecto se pinta centrado y en gris
+   porque ahi suelen ir los "no hay nada": aqui lleva contenido de verdad. */
+.ia-filtro{display:flex;align-items:center;gap:.5rem;font-size:.85rem;color:var(--muted)}
+.ia-filtro select{width:auto;margin:0}
+.tbl td.ia-det{text-align:left;color:var(--txt);padding:.2rem 1rem .6rem}
+.ia-det > details > summary{cursor:pointer;color:var(--accent);font-weight:600;width:max-content}
+.ia-cuerpo{padding:.4rem 0 .2rem;max-width:900px}
+.ia-cuerpo p{margin:.3rem 0}
+.ia-cuerpo .adv-list{max-height:16rem}
+/* los conceptos (wifi_2g_password…) no caben en la columna de las tarjetas */
+.ia-cuerpo .prof-dl > div{grid-template-columns:11rem 1fr}
+.ia-cuerpo .prof-dl code{font-size:.78rem}
+.ia-tit{margin:.7rem 0 .2rem;font-size:.8rem;text-transform:uppercase;
+  letter-spacing:.05em;color:var(--muted);font-weight:600}
+.ia-dudas{margin:.2rem 0;padding-left:1.1rem;color:var(--muted)}
+.ia-error{color:var(--err)}
+.ia-error code{color:var(--err)}
+.ia-json{margin:.3rem 0;padding:.6rem .8rem;white-space:pre-wrap;word-break:break-word;
+  background:var(--bg);border:1px solid var(--line);border-radius:var(--radius-sm);
+  max-height:16rem;overflow:auto}

@@ -167,8 +167,19 @@ Se configura **desde el panel** (Ajustes → Inteligencia artificial): proveedor
 | GET/PUT | `/settings/llm` | proveedor, modelo y clave (la clave solo se escribe, nunca se lee) |
 | POST | `/settings/llm/test` | comprueba clave, URL y modelo; devuelve `modelos` (los del proveedor) y el error literal si algo falla. Acepta un cuerpo para probar lo que hay escrito sin guardarlo |
 | GET | `/homologacion/estado` | si hay proveedor configurado |
+| GET | `/homologacion/log` | qué ha hecho la IA. Query: `limit` (100 por defecto, acotado entre 1 y 500) y `tipo` (`propuesta`, `confirmacion` o `prueba`) |
 | POST | `/homologacion/proponer` | `{device_id}` pide el mapeo de lo que falta (no aplica nada) |
 | POST | `/homologacion/confirmar` | `{key, concept, path}` guarda una sugerencia revisada |
+
+#### Registro de lo que hace la IA
+
+La auditoría general no sirve para esto: la escribe un **middleware que solo ve la petición**, así que anotaba "pidió a la IA un mapeo" y nunca qué contestó el modelo. Lo que interesa auditar cuando una propuesta acaba cambiando el perfil de un modelo es justo la respuesta, y ésa solo la tiene delante el propio endpoint. Por eso hay una tabla aparte, `ia_evento`, que se escribe desde el endpoint con la respuesta ya en la mano. Se anotan tres tipos de evento:
+
+- **`propuesta`**: modelo de CPE (`model_key`), equipo del que salió el árbol, proveedor (su URL base), modelo de lenguaje que respondió, los conceptos que se pidieron, cuántas rutas se enviaron, el mapeo propuesto, las **rutas descartadas por inventadas**, las dudas que devolvió el modelo y los milisegundos que tardó. Si el proveedor falla, queda el evento con `ok: false` y el motivo.
+- **`confirmacion`**: qué concepto y qué ruta acabaron en el catálogo. Una propuesta sin confirmar no cambia nada, y así se distingue de una que sí.
+- **`prueba`**: cada prueba del proveedor, con URL, modelo, si respondió y el error literal. La auditoría general dice "configuró el proveedor de IA" y no distingue una prueba fallida.
+
+**Nunca se guardan la clave del proveedor ni los valores del árbol.** La respuesta de `/homologacion/proponer` muestra el valor actual de cada ruta propuesta para poder revisarla —ahí van el SSID y la clave del abonado—, y ese valor no entra en el registro. En el panel está en Actividad → **IA**.
 
 ### Equipos nuevos / descubrimiento (admin)
 Un CPE recién vinculado llega al ACS **sin tag**, y como la multi-tenencia se apoya en los tags, ningún usuario ISP lo ve. El descubrimiento lo detecta y propone a qué ISP pertenece según la IP desde la que informa (la del `ConnectionRequestURL`), cruzada con una tabla de rangos.
@@ -191,6 +202,35 @@ Cada vez que se abre la ficha de un equipo, el panel guarda el perfil deducido b
 | GET | `/profiles` | perfiles aprendidos, con la evidencia de cada deducción y cuántos equipos de la flota usan cada uno |
 | GET | `/profiles/{key}` | un perfil concreto |
 | PUT | `/profiles/{key}/override` | `{concept, path}` corrige la ruta de un concepto (`path: null` la borra) |
+
+### Árboles por modelo (admin)
+Junto al perfil se guarda el **árbol** del equipo bajo la misma clave `fabricante|clase|modelo|firmware`. Así se puede saber qué expone un modelo sin tener un equipo delante.
+
+Lo que alimenta la base son dos operaciones concretas, no cualquier lectura: **abrir la ficha de un equipo** (`GET /devices/{id}/status`) y **pedir una propuesta de homologación** (`POST /homologacion/proponer`). Las demás lecturas del ACS no aportan nada; en particular `comparar_con` lee un equipo del ACS y **no** suma sus rutas a la unión, porque su trabajo es medir ese equipo contra el modelo, no cambiar la referencia con la que se le mide.
+
+De ahí una consecuencia que conviene tener presente: **consultar la base es solo de admin, pero escribir en ella no**. La ficha de un equipo la abre también un usuario ISP para los suyos, y ese `GET /devices/{id}/status` une las rutas de ese equipo a las del modelo. Es deliberado: así el modelo se aprende de toda la flota y no solo de los equipos que mire un administrador. Por eso mismo se guardan **rutas y si son escribibles, nunca valores** (la misma regla que rige lo que se manda a la IA: en un árbol real van el SSID y la clave WiFi del abonado), y por eso la lista de equipos que aportaron no sale en la descarga.
+
+Las rutas se **unen**, no se sobrescriben, por un caso real de esta flota: un equipo recién adoptado trae unos 34 parámetros y otro del mismo modelo ya refrescado trae 3579; si el último en leerse mandara, borraría lo que ya se sabía. La unión recoge además las ramas que un equipo expone y otro no porque tiene esa función apagada. Una ruta queda como escribible si algún equipo del modelo la reportó así, y la raíz guardada (`Device` o `InternetGatewayDevice`) solo se sustituye si el equipo trae una: un documento sin raíz no puede borrar la que ya se sabía.
+
+La unión se hace **en una sola transacción** (`BEGIN IMMEDIATE`): leer en una conexión, unir en Python y escribir en otra deja una ventana en la que dos lecturas simultáneas del mismo modelo pierden una de las dos uniones. Hoy no es alcanzable —un worker y código síncrono—, pero lo sería con `--workers N` o un segundo proceso. Una fila corrupta (una restauración a medias, una edición a mano) **ya no tumba la ficha** de todos los equipos de ese modelo: se anota en el log y el árbol se rehace desde cero.
+
+De la unión sale la comparación que evita el diagnóstico equivocado: `comparar_con=<id de equipo>` dice cuántas rutas del modelo le faltan a ese equipo, con una muestra de cuáles. Un árbol a medias se ve de un vistazo, en vez de concluir que el modelo no soporta algo. En el resumen por modelo, `incompleto` tiene **tres estados**: `true` si ningún equipo por separado llega al tamaño de la unión, `false` si alguno la alcanza y `null` si todavía no se sabe —hay árbol guardado pero ningún equipo registrado que lo respalde—. Devolver `false` en ese caso era mentir, y el panel usa el mismo criterio de tres estados en las capacidades por modelo: con el árbol a medias nunca se afirma que algo no se soporta.
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/trees` | resumen por modelo: rutas de la unión (`n_params`), equipos que aportaron (`devices`), el árbol más grande visto en un solo equipo (`max_equipo`) e `incompleto` (`true`/`false`/`null`). Sin las rutas: son cientos o miles por fila |
+| GET | `/trees/{key}` | las rutas de ese modelo (`path` + `writable`), con `total` y `truncado`, y los equipos que aportaron (`equipos`) con cuánto árbol cada uno. Query: `q` (filtra rutas que contengan ese texto), `escribibles` (solo las escribibles), `limit` (500 por defecto, máximo 20000, `0` = todas), `comparar_con` (id de un equipo: `tiene`, `del_modelo`, `faltan` y hasta 50 ejemplos) |
+| DELETE | `/trees/{key}` | olvida el árbol de ese modelo y quién aportó, para que se reaprenda desde cero |
+
+Sobre el detalle, tres cosas que el panel necesita y no se adivinan:
+
+- **`total` es posterior al filtro**, no el tamaño del modelo: con `q=SSID`, un modelo de 34 rutas devuelve `total: 10`. Quien pinte "X de Y rutas" tiene que usar `n_params` como Y, o dirá "10 de 10". `truncado` avisa de que hay más rutas de las que caben en `limit`.
+- **`limit` admite hasta 20000** (`limit` negativo o mayor da `422`). Para un modelo con más rutas que eso, `limit=0` no es una comodidad: es la única forma de verlas todas.
+- **`limit=0` no devuelve `equipos`.** Ésa es la descarga a un archivo, y no debe arrastrar los seriales de equipos de varios ISP, que además no hacen falta para saber qué expone un modelo. Con el límite normal, `equipos` viene.
+
+`DELETE` existe porque la unión solo crece y el flag de escribible se queda pegado: si entra basura —un equipo que reportaba mal su firmware, una prueba—, no hay forma de quitar esa ruta de la unión, y ésta es la salida. Borra también los equipos registrados de ese modelo, así que tras el borrado `incompleto` vuelve a ser `null` hasta que alguien abra una ficha.
+
+La clave va en la ruta y lleva `|`: URL-encodéala como el `_id` de un equipo. Si de ese modelo todavía no hay árbol guardado, `404` (también en `DELETE`). Con `comparar_con`, un equipo que simplemente no está en el ACS da **`404`**; el `502` con el motivo queda para cuando la consulta al ACS falla (NBI caído, timeout).
 
 ### Conexión al ACS (admin)
 | Método | Ruta | Descripción |
@@ -266,10 +306,11 @@ En **Ajustes → Tema** se elige entre cuatro paletas: *Pizarra* (la de siempre)
 
 ## Panel: página de Aprovisionamiento (admin)
 
-Una página con tres pestañas, que son la cara visible de todo lo anterior:
+Una página con cuatro pestañas, que son la cara visible de todo lo anterior:
 
 - **Equipos nuevos**: bandeja de los que llegan sin tag, con el ISP sugerido y el motivo; tabla de rangos `CIDR → ISP`; y el interruptor entre sugerir y asignar solo.
 - **Perfiles de modelo**: catálogo por modelo+firmware con la evidencia de cada deducción, las correcciones manuales, y el botón de proponer mapeo con IA cuando hay proveedor configurado.
+- **Árboles**: tabla de modelos con las rutas de la unión, los equipos que aportaron y el aviso de árbol incompleto; al abrir uno, el detalle con buscador de rutas y descarga del árbol en JSON.
 - **DHCP / Option 43**: el generador del script para MikroTik, con vista previa, copiar y descargar `.rsc`.
 
 ## Seguridad

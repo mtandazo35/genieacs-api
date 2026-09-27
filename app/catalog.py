@@ -12,7 +12,7 @@ import json
 import logging
 
 from . import db
-from .treeprofile import derive, flatten
+from .treeprofile import derive, flatten, root_of
 
 log = logging.getLogger("genieacs_api.catalog")
 
@@ -57,7 +57,29 @@ def recordar(doc: dict) -> tuple[str, dict]:
         db.upsert_model_profile(key, i["manufacturer"], i["product_class"],
                                 i["model"], i["firmware"], nuevo)
         log.info("perfil de modelo %s: %s", "actualizado" if fila else "aprendido", key)
+    recordar_arbol(doc)          # el arbol crudo tambien se guarda, por modelo
     return key, perfil
+
+
+def rutas_de(doc: dict) -> dict:
+    """{ruta: escribible} del arbol de un equipo. Sin valores, a proposito:
+    el SSID y la clave del abonado no tienen nada que hacer en una base de
+    arboles que existe para saber QUE parametros expone un modelo."""
+    return {path: bool(w) for path, _v, w in flatten(doc)}
+
+
+def recordar_arbol(doc: dict) -> dict:
+    """Guarda el arbol de este equipo en la base del modelo y devuelve el resumen.
+
+    Se UNEN las rutas en vez de sobrescribir: un equipo recien adoptado trae 30
+    parametros y otro del mismo modelo ya refrescado trae 3500; la union tambien
+    recoge lo que un equipo expone y otro no porque tiene la funcion apagada."""
+    key = clave(doc)
+    del_equipo = rutas_de(doc)
+    res = db.merge_model_tree(key, root_of(doc), del_equipo, doc.get("_id") or None)
+    if res["nuevas"]:
+        log.info("arbol de modelo %s: %d rutas (+%d)", key, res["n_params"], res["nuevas"])
+    return {"key": key, "del_equipo": len(del_equipo), **res}
 
 
 def overrides(key: str) -> dict:
