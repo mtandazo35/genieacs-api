@@ -1561,11 +1561,22 @@ $("#llm-clear").addEventListener("click", async () => {
 });
 
 // El proveedor dice que modelos tiene: se ofrecen en vez de tener que acertar el nombre
+// un proveedor sirve mas cosas que modelos de chat: whisper transcribe audio y
+// los *guard son clasificadores de seguridad. Ofrecerlos aqui es ofrecer un
+// fallo: no saben contestar un mapeo de rutas TR-069
+const NO_SON_DE_CHAT = /whisper|tts|orpheus|guard|embed|moderation|rerank/i;
+
 function pintarModelos(modelos) {
   const caja = $("#llm-modelos-vista"), chips = $("#llm-modelos-chips"), dl = $("#llm-modelos");
   if (!modelos || !modelos.length) { caja.classList.add("hidden"); return; }
-  dl.innerHTML = modelos.map(m => `<option value="${esc(m)}">`).join("");
-  chips.innerHTML = modelos.map(m => `<button type="button" class="chip" data-modelo="${esc(m)}">${esc(m)}</button>`).join("");
+  const utiles = modelos.filter(m => !NO_SON_DE_CHAT.test(m));
+  const ocultos = modelos.length - utiles.length;
+  const lista = utiles.length ? utiles : modelos;      // si todos se filtran, mejor ensenarlos
+  dl.innerHTML = lista.map(m => `<option value="${esc(m)}">`).join("");
+  chips.innerHTML = lista.map(m => `<button type="button" class="chip" data-modelo="${esc(m)}">${esc(m)}</button>`).join("")
+    + (utiles.length && ocultos
+        ? `<span class="muted small" title="Transcripción de audio, clasificadores de seguridad y similares: no saben proponer un mapeo">y ${ocultos} que no son de chat</span>`
+        : "");
   caja.classList.remove("hidden");
 }
 
