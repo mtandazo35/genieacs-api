@@ -63,7 +63,8 @@ app = FastAPI(
 
 
 _AUDIT_PREFIXES = ("/devices", "/firmware", "/settings", "/profiles", "/discovery",
-                    "/homologacion", "/provisioning", "/auth/users", "/auth/me/password")
+                    "/homologacion", "/provisioning", "/trees", "/auth/users",
+                    "/auth/me/password")
 _AUDIT_SKIP = ("read", "refresh")   # solo lectura: no ensucian el historial
 
 
@@ -141,7 +142,19 @@ def _audit_detail(method, parts, b):
             return "Configuro el proveedor de IA"      # nunca la clave
         return "Cambio la conexion al ACS"
     if parts[0] == "profiles": return f"Corrigio la ruta de '{b.get('concept', '')}' en un perfil de modelo"
+    if parts[0] == "trees":
+        # importar cambia el catalogo entero y borrar tira lo aprendido de un
+        # modelo: las dos cosas tienen que poder rastrearse despues
+        if len(parts) > 1 and parts[1] == "import":
+            return f"Importo un catalogo de {len(b.get('modelos') or [])} modelo(s)"
+        if method == "DELETE":
+            return f"Olvido el arbol del modelo {'/'.join(parts[1:]) or '?'}"
     return f"{method} {seg or '/'.join(parts[:2])}"
+
+
+# un catalogo de una flota real son unos pocos MB; por encima de esto es otro
+# archivo (o alguien intentando llenar la memoria del servidor)
+MAX_CATALOGO_BYTES = 64 * 1024 * 1024
 
 
 _SECURITY_HEADERS = {
@@ -157,6 +170,15 @@ async def audit_middleware(request: Request, call_next):
     method, path = request.method, request.url.path
     rid = uuid.uuid4().hex[:16]
     request.state.request_id = rid
+    # importar catalogo: un archivo sano son unos pocos MB. Los limites de
+    # MAX_MODELOS/MAX_RUTAS estan dentro del endpoint, pero para entonces
+    # pydantic ya materializo el JSON entero en memoria
+    if path == "/trees/import" and method == "POST":
+        cl = request.headers.get("content-length", "")
+        if cl.isdigit() and int(cl) > MAX_CATALOGO_BYTES:
+            return JSONResponse(
+                {"detail": f"El catalogo es demasiado grande (maximo "
+                           f"{MAX_CATALOGO_BYTES // (1024 * 1024)} MB)"}, status_code=413)
     # subidas de firmware: rechazar por tamano declarado antes de parsear el multipart
     if path.startswith("/firmware/upload") and method == "POST":
         cl = request.headers.get("content-length", "")

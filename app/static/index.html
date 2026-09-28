@@ -596,6 +596,8 @@
         <div class="page-head"><h3>Modelos con árbol guardado</h3><button id="arb-refresh" class="ghost small">↻ Actualizar</button></div>
         <div id="arb-list"></div>
 
+        <p class="muted small">El <b>catálogo portable</b> (exportar los modelos aprendidos aquí e importar los de otra instalación) está en <b>Ajustes → Respaldo</b>.</p>
+
         <dialog id="arb-modal" class="modal">
           <div class="modal-body">
             <div class="modal-head"><h3 id="arb-modal-titulo">Rutas del modelo</h3>
@@ -621,6 +623,7 @@
         <button class="subtab admin-only hidden" data-ssub="acs">Conexión al ACS</button>
         <button class="subtab admin-only hidden" data-ssub="ia">Inteligencia artificial</button>
         <button class="subtab admin-only hidden" data-ssub="dhcp">DHCP en MikroTik</button>
+        <button class="subtab admin-only hidden" data-ssub="respaldo">Respaldo</button>
       </div>
 
       <div data-spanel="cuenta">
@@ -772,9 +775,66 @@ set [find address="192.0.2.0/24"] dhcp-option-set=""
         </ol>
       </div>
       </div>
+      <div data-spanel="respaldo" class="hidden admin-only">
+        <div class="card-form">
+          <h3>Dos respaldos distintos</h3>
+          <p class="muted small">Es la confusión típica, así que conviene tenerlo claro antes de pulsar nada: <b>lo que hay en esta página no es el respaldo del panel</b>.</p>
+          <dl class="prof-dl">
+            <div><dt>Catálogo de modelos</dt>
+              <dd>Lo de aquí abajo. Son las <b>rutas aprendidas de cada modelo de CPE</b>, su perfil deducido y las correcciones a mano. Sirve para llevar lo aprendido en el <b>laboratorio</b> a una instalación de <b>producción</b>. <b>No</b> lleva equipos, ni seriales, ni usuarios, ni credenciales.</dd></div>
+            <div><dt>Base de datos</dt>
+              <dd>El respaldo de verdad: los <b>usuarios del panel</b> y las <b>claves WiFi y PPPoE de los CPE</b> guardadas en los respaldos de configuración. <b>No se hace desde el panel</b> —precisamente porque lleva credenciales—: es <code>manage.py backup-db</code> en el servidor, y está documentado en <code>DEPLOY.md</code>.</dd></div>
+          </dl>
+          <p class="muted small">Exportar el catálogo <b>no sustituye</b> al respaldo de la base de datos: si se pierde el servidor, el catálogo te devuelve los modelos, no tus abonados ni sus claves.</p>
+        </div>
+
+        <div class="section">
+          <div class="page-head"><h3 style="margin:0">Catálogo portable</h3>
+            <div class="head-actions">
+              <button type="button" id="cat-exportar" class="ghost small">⬇ Exportar catálogo</button>
+              <button type="button" id="cat-importar-btn" class="ghost small">⬆ Importar catálogo…</button>
+              <input type="file" id="cat-importar" accept="application/json" class="hidden">
+            </div>
+          </div>
+          <p class="muted small">Viajan las rutas de cada modelo, el perfil deducido y las correcciones a mano. Los modelos se ven en <b>Aprovisionamiento → Árboles</b>.</p>
+          <p class="muted small">Al importar, las rutas se <b>unen</b> con las de aquí y lo local manda: el perfil deducido solo se escribe si aquí no había ninguno, y una corrección del archivo solo entra si ese concepto está libre. Nada de lo que ya hay aquí se pierde.</p>
+          <div id="cat-resultado" class="small"></div>
+        </div>
+      </div>
+
     </section>
   </main>
 </div>
+
+<!-- Confirmar / pedir un dato: sustituyen a confirm() y prompt() del navegador.
+     Viven fuera de #app-view porque los usa cualquier pagina del panel, y
+     cuelgan del <body> para que ::backdrop tape todo. Los textos los pone
+     app.js (confirmar() y pedirTexto()). -->
+<dialog id="confirm-modal" class="modal">
+  <div class="modal-body">
+    <div class="modal-head"><h3 id="confirm-modal-titulo">Confirmar</h3></div>
+    <div id="confirm-modal-texto" class="dlg-texto"></div>
+    <div class="modal-foot">
+      <button type="button" id="confirm-modal-cancelar" class="ghost" data-close>Cancelar</button>
+      <button type="button" id="confirm-modal-ok">Continuar</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="pedir-modal" class="modal">
+  <div class="modal-body">
+    <div class="modal-head"><h3 id="pedir-modal-titulo">Escribe un valor</h3></div>
+    <div id="pedir-modal-texto" class="dlg-texto"></div>
+    <label><span id="pedir-modal-campo">Valor</span>
+      <input id="pedir-modal-input" type="text" maxlength="128">
+    </label>
+    <div id="pedir-modal-error" class="error hidden"></div>
+    <div class="modal-foot">
+      <button type="button" id="pedir-modal-cancelar" class="ghost" data-close>Cancelar</button>
+      <button type="button" id="pedir-modal-ok">Guardar</button>
+    </div>
+  </div>
+</dialog>
 
 <div id="toast" class="toast hidden"></div>
 <script src="app.js"></script>

@@ -11,8 +11,10 @@ Se guardan RUTAS y si son escribibles, nunca valores: en un arbol real van el
 SSID y la clave WiFi del abonado, y aqui no hacen falta para nada.
 """
 import json
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from typing import Optional
 
 from .. import catalog, db
@@ -47,6 +49,131 @@ async def listar():
         f["incompleto"] = (None if f.get("max_equipo") is None
                            else f["max_equipo"] < f["n_params"])
     return filas
+
+
+# limites del archivo que se importa: un catalogo real de un ISP anda en
+# decenas de modelos y unos miles de rutas cada uno; lo de mas arriba es un
+# archivo equivocado (o un intento de llenar la memoria del servidor)
+MAX_MODELOS = 2000
+MAX_RUTAS_POR_MODELO = 50000
+FORMATO = 1
+
+
+@router.get("/export")
+async def exportar():
+    """El catalogo aprendido, para llevarlo a otra instalacion.
+
+    Lleva rutas, perfil deducido y correcciones a mano. NO lleva equipos (ni
+    ids, ni seriales, ni quien aporto que rama) ni ninguna credencial: para eso
+    ya esta el respaldo de la BD, que es otra cosa y no se mueve de sitio."""
+    modelos, ilegibles = [], 0
+    for f in db.model_trees_completos():
+        rutas = _rutas_guardadas(f)
+        if rutas is None:
+            # fila ilegible: no se exporta basura, pero se dice cuantas hubo en
+            # vez de entregar un catalogo mas corto sin explicacion
+            ilegibles += 1
+            continue
+        modelos.append({
+            "key": f["key"], "root": f.get("root"),
+            "manufacturer": f.get("manufacturer"), "product_class": f.get("product_class"),
+            "model": f.get("model"), "firmware": f.get("firmware"),
+            "paths": rutas,
+            "profile": _perfil_sin_evidencia(_json_o_none(f.get("profile"))),
+            "overrides": _json_o_none(f.get("overrides")) or {},
+        })
+    return {"formato": FORMATO, "generado": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "modelos": modelos, "ilegibles": ilegibles}
+
+
+def _perfil_sin_evidencia(perfil):
+    """El perfil sin la evidencia: las instancias deducidas viajan, el porque no.
+
+    La evidencia cita valores del equipo del que se dedujo (la IP del gateway,
+    la WAN, la red del pool DHCP). Eso no puede salir en un archivo que se lleva
+    a otra instalacion, y alli no sirve de nada: la evidencia de aqui no explica
+    nada de la flota de alla, que volvera a deducir la suya al leer un equipo."""
+    if not isinstance(perfil, dict):
+        return perfil
+    return {k: v for k, v in perfil.items() if k != "evidencia"}
+
+
+def _json_o_none(texto):
+    try:
+        return json.loads(texto) if texto else None
+    except ValueError:
+        return None
+
+
+class CatalogoIn(BaseModel):
+    formato: int = Field(..., description="version del archivo; hoy 1")
+    modelos: list[dict] = Field(..., max_length=MAX_MODELOS)
+
+
+@router.post("/import")
+async def importar(body: CatalogoIn):
+    """Mete un catalogo exportado en esta instalacion, sin pisar lo local.
+
+    - las rutas se UNEN con las que ya hubiera, como cuando se aprenden solas;
+    - el perfil deducido solo se escribe si aqui no habia ninguno: lo deducido
+      de un equipo real de esta flota manda sobre lo que traiga un archivo;
+    - una correccion a mano del archivo solo entra si ese concepto esta libre.
+    """
+    if body.formato != FORMATO:
+        raise HTTPException(422, f"Formato {body.formato} desconocido (esta version lee el {FORMATO})")
+
+    res = {"modelos": 0, "nuevos": 0, "rutas_nuevas": 0,
+           "perfiles_nuevos": 0, "correcciones": 0, "ignorados": []}
+    for m in body.modelos:
+        key = str(m.get("key") or "").strip()
+        rutas = m.get("paths")
+        if not key or not isinstance(rutas, dict) or not rutas:
+            res["ignorados"].append(key or "(sin clave)")
+            continue
+        if len(rutas) > MAX_RUTAS_POR_MODELO:
+            res["ignorados"].append(f"{key} (demasiadas rutas: {len(rutas)})")
+            continue
+        # solo rutas y si son escribibles; cualquier otra cosa del archivo se tira
+        limpias = {str(r): bool(w) for r, w in rutas.items() if isinstance(r, str) and r}
+        if not limpias:
+            res["ignorados"].append(key)
+            continue
+
+        era_nuevo = db.get_model_tree(key) is None
+        union = db.merge_model_tree(key, m.get("root") or None, limpias, None)
+        res["modelos"] += 1
+        res["nuevos"] += 1 if era_nuevo else 0
+        res["rutas_nuevas"] += union["nuevas"]
+
+        fila_local = db.get_model_profile(key)
+        # "no hay fila" no es "no hay perfil": si la fila existe vacia (p.ej. la
+        # creo una importacion anterior para poder colgar las correcciones), un
+        # archivo que SI trae perfil tiene que poder rellenarla
+        perfil_local = _json_o_none(fila_local.get("profile")) if fila_local else None
+        # un archivo de una version anterior puede traer evidencia con IPs de
+        # otra red: no se guarda, aqui no explica nada
+        del_archivo = _perfil_sin_evidencia(m.get("profile")) or None
+        del_archivo = del_archivo if isinstance(del_archivo, dict) else None
+        if not fila_local or (del_archivo and not perfil_local):
+            partes = key.split(catalog.SEPARADOR)
+            fabricante, clase, modelo, firmware = (partes + ["", "", "", ""])[:4]
+            db.upsert_model_profile(
+                key, m.get("manufacturer") or fabricante, m.get("product_class") or clase,
+                m.get("model") or modelo, m.get("firmware") or firmware,
+                json.dumps(del_archivo or {}, sort_keys=True, ensure_ascii=False),
+                # un modelo que solo entro por un archivo no tiene equipos aqui:
+                # decir que hay uno es inventarse flota
+                devices=0)
+            # solo cuenta como perfil si de verdad se trajo uno: un {} no es un perfil
+            res["perfiles_nuevos"] += 1 if del_archivo else 0
+        # las correcciones del archivo no pisan las de aqui
+        locales = catalog.overrides(key)
+        for concepto, ruta in (m.get("overrides") or {}).items():
+            if isinstance(concepto, str) and isinstance(ruta, str) and ruta \
+                    and concepto not in locales:
+                catalog.set_override(key, concepto, ruta)
+                res["correcciones"] += 1
+    return res
 
 
 @router.delete("/{key:path}")

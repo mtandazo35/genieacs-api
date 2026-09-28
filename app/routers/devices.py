@@ -1,5 +1,6 @@
 """Listado y estado de dispositivos (filtrado por ISP)."""
 import asyncio
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -11,7 +12,7 @@ from ..deps import CurrentUser, authorized_device, current_user, tenant_query
 from ..genieacs import genie
 from ..parammap import pick_map, resolve
 from .. import catalog
-from ..treeprofile import capabilities, coverage, effective_params
+from ..treeprofile import capabilities, coverage, effective_params, wans
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
@@ -119,7 +120,9 @@ async def list_devices(user: CurrentUser = Depends(current_user)):
     projection = ["_id", "_tags", "_lastInform", "_deviceId",
                   "InternetGatewayDevice.DeviceInfo.SoftwareVersion",
                   "InternetGatewayDevice.DeviceInfo.ModelName",
-                  "Device.DeviceInfo.SoftwareVersion", "Device.DeviceInfo.ModelName"]
+                  "Device.DeviceInfo.SoftwareVersion", "Device.DeviceInfo.ModelName",
+                  "Device.ManagementServer.PeriodicInformInterval",
+                  "InternetGatewayDevice.ManagementServer.PeriodicInformInterval"]
     rows = await genie.query_devices(tenant_query(user), projection)
     meta = db.all_device_meta()
 
@@ -146,12 +149,50 @@ async def list_devices(user: CurrentUser = Depends(current_user)):
             "customer": m.get("customer"),
             "tags": d.get("_tags", []),
             "last_inform": d.get("_lastInform"),
+            **_conexion(d, _v),
             "manufacturer": did.get("_Manufacturer"),
             "model": model,
             "serial": did.get("_SerialNumber"),
             "firmware": firmware,
         })
     return out
+
+
+# margen sobre los dos informes perdidos: cubre el jitter del reloj del CPE y
+# el tiempo que tarda el ACS en escribir el inform
+_MARGEN_INFORM = 60
+
+
+def _conexion(d: dict, _v) -> dict:
+    """Si el equipo esta en linea, y con que regla se decidio.
+
+    No hay conexion permanente con un CPE: lo unico que se sabe es cuando
+    reporto por ultima vez. Se le da por vivo mientras no haya perdido DOS
+    informes seguidos, medido con SU intervalo, no con un plazo inventado."""
+    intervalo = (_v(d, "Device.ManagementServer.PeriodicInformInterval")
+                 or _v(d, "InternetGatewayDevice.ManagementServer.PeriodicInformInterval"))
+    try:
+        intervalo = int(intervalo) if intervalo not in (None, "") else None
+    except (TypeError, ValueError):
+        intervalo = None
+    if intervalo is not None and intervalo <= 0:
+        intervalo = None
+    limite = 2 * intervalo + _MARGEN_INFORM if intervalo else 15 * 60
+    edad = None
+    li = d.get("_lastInform")
+    if li:
+        try:
+            visto = datetime.fromisoformat(str(li).replace("Z", "+00:00"))
+            if visto.tzinfo is None:
+                visto = visto.replace(tzinfo=timezone.utc)
+            edad = max(0, int((datetime.now(timezone.utc) - visto).total_seconds()))
+        except ValueError:
+            edad = None
+    return {"inform_interval": intervalo,
+            "sin_reportar": edad,
+            # None = no ha reportado nunca; no es lo mismo que estar caido
+            "online": None if edad is None else edad < limite,
+            "limite_online": limite}
 
 
 def _read(dev: dict, path: str):
@@ -361,6 +402,10 @@ async def device_status(device_id: str, dev=Depends(authorized_device)):
     # que sabe hacer este modelo: el panel esconde lo que no soporta en vez de
     # ofrecer formularios que fallarian al pulsar
     result["capabilities"] = capabilities(full, pmap)
+    # TODAS las WAN configuradas, no solo por la que sale el trafico: un XX530
+    # tiene la de datos, la de gestion y las que estan puestas y caidas, y ver
+    # solo la activa esconde justo lo que se compara con el aprovisionamiento
+    result["wans"] = wans(full)
     for k in _STATUS_KEYS:
         r = eff.get(k) or resolve(pmap, k)
         if r:

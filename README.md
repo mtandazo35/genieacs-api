@@ -224,6 +224,8 @@ De la unión sale la comparación que evita el diagnóstico equivocado: `compara
 |---|---|---|
 | GET | `/trees` | resumen por modelo: rutas de la unión (`n_params`), equipos que aportaron (`devices`), el árbol más grande visto en un solo equipo (`max_equipo`) e `incompleto` (`true`/`false`/`null`). Sin las rutas: son cientos o miles por fila |
 | GET | `/trees/{key}` | las rutas de ese modelo (`path` + `writable`), con `total` y `truncado`, y los equipos que aportaron (`equipos`) con cuánto árbol cada uno. Query: `q` (filtra rutas que contengan ese texto), `escribibles` (solo las escribibles), `limit` (500 por defecto, máximo 20000, `0` = todas), `comparar_con` (id de un equipo: `tiene`, `del_modelo`, `faltan` y hasta 50 ejemplos) |
+| GET | `/trees/export` | el catálogo entero en un JSON portable: `{formato: 1, generado, modelos[], ilegibles}`, y cada modelo con `key`, `root`, fabricante/clase/modelo/firmware, `paths`, `profile` y `overrides`. Sin equipos y sin credenciales. `ilegibles` cuenta las filas que no se pudieron exportar porque su árbol guardado está corrupto: antes se saltaban en silencio y el catálogo salía más corto sin explicación (se rehacen solas al abrir la ficha de un equipo de ese modelo) |
+| POST | `/trees/import` | mete un catálogo exportado en esta instalación **sin pisar lo local**. Devuelve `{modelos, nuevos, rutas_nuevas, perfiles_nuevos, correcciones, ignorados[]}`. Un cuerpo de más de 64 MB → `413` antes de parsear nada; `formato` distinto de `1` → `422`; más de 2000 modelos en el archivo → `422` de validación y no se importa nada |
 | DELETE | `/trees/{key}` | olvida el árbol de ese modelo y quién aportó, para que se reaprenda desde cero |
 
 Sobre el detalle, tres cosas que el panel necesita y no se adivinan:
@@ -235,6 +237,24 @@ Sobre el detalle, tres cosas que el panel necesita y no se adivinan:
 `DELETE` existe porque la unión solo crece y el flag de escribible se queda pegado: si entra basura —un equipo que reportaba mal su firmware, una prueba—, no hay forma de quitar esa ruta de la unión, y ésta es la salida. Borra también los equipos registrados de ese modelo, así que tras el borrado `incompleto` vuelve a ser `null` hasta que alguien abra una ficha.
 
 La clave va en la ruta y lleva `|`: URL-encodéala como el `_id` de un equipo. Si de ese modelo todavía no hay árbol guardado, `404` (también en `DELETE`). Con `comparar_con`, un equipo que simplemente no está en el ACS da **`404`**; el `502` con el motivo queda para cuando la consulta al ACS falla (NBI caído, timeout).
+
+#### Catálogo portable: llevar lo aprendido a otra instalación
+
+Lo que la base de árboles sabe se aprende equipo a equipo: hasta que alguien abre la ficha de un CPE de cada modelo, una instalación nueva no sabe qué expone ninguno. Eso convierte el paso de laboratorio a producción en volver a empezar, aunque el trabajo de homologación ya esté hecho. `GET /trees/export` y `POST /trees/import` (admin) mueven ese conocimiento en un archivo JSON.
+
+**Qué lleva y qué no.** Lleva lo que es propiedad del **modelo**: el árbol de rutas con su marca de escribible, la raíz (`Device` o `InternetGatewayDevice`), la identidad (fabricante, clase, modelo, firmware), el perfil deducido y las correcciones a mano. **No lleva equipos** —ni ids, ni seriales, ni qué equipo aportó cada rama— **ni ninguna credencial**, por la misma razón por la que la base guarda rutas y no valores: en un árbol real van el SSID y la clave WiFi del abonado.
+
+Por eso **el catálogo no sustituye al respaldo de la base de datos** (`manage.py backup-db`, en [DEPLOY.md](DEPLOY.md#operación)). Son dos herramientas con dos propósitos: el respaldo lleva usuarios, auditoría y las claves WiFi/PPPoE de los CPE, así que sirve para restaurar *esa* instalación y no se mueve de una a otra; el catálogo lleva solo lo aprendido del modelo, y por eso sí se puede llevar de un laboratorio a producción, o de un ISP a otro. El paso a paso está en [DEPLOY.md](DEPLOY.md#llevar-el-catálogo-de-modelos-a-producción).
+
+**Al importar manda lo local**, porque lo local se dedujo de equipos reales de esa flota:
+
+- las **rutas se unen** con las que ya hubiera, igual que cuando se aprenden solas: el archivo puede añadir ramas, nunca quitar ninguna ni desmarcar un escribible;
+- un **perfil deducido localmente no se sustituye** por el del archivo; el del archivo entra solo donde no había perfil, como semilla. En cuanto se abre la ficha de un equipo real de ese modelo, la deducción local lo recalcula y lo sustituye, que es lo que se quiere: el archivo adelanta trabajo, no fija nada. «No hay perfil» **no es lo mismo que «no hay fila»**: la fila del catálogo se crea igualmente, porque de ella cuelgan las correcciones, pero si queda sin perfil (el archivo no traía ninguno), una importación posterior que sí lo traiga lo rellena. Así el resultado no depende del orden en que se importen los archivos, y `perfiles_nuevos` solo cuenta los perfiles que de verdad se trajeron: un `{}` no es un perfil;
+- una **corrección a mano local no se pisa**: del archivo entran solo los conceptos que aquí están libres.
+
+**Lo que se ignora, sin tumbar el resto.** Un cuerpo de más de `MAX_CATALOGO_BYTES` (64 MB) lo corta el middleware con un `413` según el tamaño declarado, **antes** de que pydantic materialice el JSON entero en memoria: los topes de modelos y de rutas viven dentro del endpoint y para entonces ya se habría pagado el archivo completo. `formato` distinto de `1` → `422` (esta versión solo lee el `1`). Más de `MAX_MODELOS` (2000) modelos en el archivo lo rechaza la validación del cuerpo: `422` y no entra nada, porque un archivo así es un error o un intento de llenar la memoria del servidor. Dentro del archivo, cada entrada se juzga sola y las malas van a la lista `ignorados` mientras las demás se importan: sin `key`, con `paths` que no es un objeto o está vacío, con más de `MAX_RUTAS_POR_MODELO` (50000) rutas (y ahí `ignorados` dice cuántas traía), o cuyas rutas se quedan en nada tras descartar las claves que no son cadenas. De cada ruta se conserva la ruta y si es escribible; cualquier otro campo que traiga el archivo se tira.
+
+El catálogo importado **no registra equipos**, porque no los trae: en el resumen por modelo, esos modelos salen con `devices: 0` e `incompleto: null` hasta que alguien abra la ficha de un equipo real. Es coherente con los tres estados de `incompleto`: no hay nadie que respalde ese árbol, así que no se afirma ni que esté completo ni que no.
 
 ### Conexión al ACS (admin)
 | Método | Ruta | Descripción |
@@ -323,7 +343,7 @@ Una página con cuatro pestañas, que son la cara visible de todo lo anterior:
 
 - **Equipos nuevos**: bandeja de los que llegan sin tag, con el ISP sugerido y el motivo; tabla de rangos `CIDR → ISP`; y el interruptor entre sugerir y asignar solo.
 - **Perfiles de modelo**: catálogo por modelo+firmware con la evidencia de cada deducción, las correcciones manuales, y el botón de proponer mapeo con IA cuando hay proveedor configurado — abre un modal donde se elige el equipo de una lista y se guardan las sugerencias que queden marcadas.
-- **Árboles**: tabla de modelos con las rutas de la unión, los equipos que aportaron y el aviso de árbol incompleto; al abrir uno, el detalle con buscador de rutas y descarga del árbol en JSON.
+- **Árboles**: tabla de modelos con las rutas de la unión, los equipos que aportaron y el aviso de árbol incompleto; al abrir uno, el detalle con buscador de rutas y descarga del árbol en JSON. Debajo, el apartado **Catálogo portable**, con *Exportar catálogo* (descarga `catalogo-modelos-AAAA-MM-DD.json`) e *Importar catálogo*, que es la vía para pasar a producción los modelos ya aprendidos en el laboratorio. El archivo se revisa en el navegador antes de mandarlo —que sea JSON, que traiga `formato` y una lista `modelos` no vacía, y que no pese lo que no puede pesar un catálogo—, así un archivo cortado o equivocado se explica con su nombre delante en vez de volver como un `422`; y al terminar se muestra qué entró y qué se ignoró, con las entradas descartadas listadas. Exportar sin ningún árbol guardado no descarga nada y lo dice: un archivo con cero modelos se importaría en producción creyendo que se llevó algo.
 - **DHCP / Option 43**: el generador del script para MikroTik, con vista previa, copiar y descargar `.rsc`.
 
 ## Seguridad

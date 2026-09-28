@@ -10,12 +10,13 @@ sugerencias con casilla. Estas pruebas leen `app/static/*` como texto, igual que
 las demas pruebas de panel del repo: comprueban el contrato de ids y que el
 flujo ya no depende de dialogos nativos.
 
-Ojo con la regla de `prompt`/`confirm`: **solo** se prohiben en el flujo de la
-IA. En el panel quedan varios usos legitimos —el `prompt()` de la contrasena
-nueva de un usuario y el `confirm()` de su borrado (manejador de `[data-uact]`),
-y los avisos antes de aplicar cambios a un equipo—, asi que la prueba acota la
-prohibicion a los bloques de codigo de la IA en vez de vetar la palabra en todo
-app.js, y hay otra prueba que vigila que los de usuarios sigan existiendo.
+Ojo con la regla de `prompt`/`confirm`: cuando se escribio este fichero solo se
+prohibian en el flujo de la IA, porque en el resto del panel quedaban usos
+nativos a proposito (la contrasena nueva de un usuario, su borrado, los avisos
+antes de tocar un equipo). Ya no queda ninguno: estan todos en modales, y quien
+lo vigila en todo app.js es `test_confirmaciones.py`. Estas pruebas se quedan
+con lo suyo —el flujo de la IA— y solo comprueban que sigue sin depender de
+dialogos del navegador.
 """
 import re
 from pathlib import Path
@@ -139,9 +140,9 @@ def test_el_modal_se_puede_cerrar_sin_guardar():
 def test_el_flujo_de_la_ia_ya_no_usa_dialogos_del_navegador():
     """Ningun bloque de la IA puede llamar a `prompt(` ni a `confirm(`.
 
-    Se acota a los bloques del flujo de la IA a proposito: en app.js quedan
-    usos legitimos (la contrasena nueva de un usuario, su borrado, los avisos
-    antes de tocar un equipo) y vetar la palabra entera seria prohibir de mas."""
+    Acotado a los bloques del flujo de la IA: es lo que motivo este fichero. La
+    prohibicion en todo app.js —con la expresion que no confunde `confirmar(`
+    con `confirm(`— vive en `test_confirmaciones.py`."""
     culpables = []
     for linea, texto in _bloques():
         if not any(m in texto for m in MARCAS_IA):
@@ -152,14 +153,15 @@ def test_el_flujo_de_la_ia_ya_no_usa_dialogos_del_navegador():
     assert not culpables, "\n".join(culpables)
 
 
-def test_los_dialogos_nativos_legitimos_siguen_en_su_sitio():
-    """La prueba de arriba no vale nada si alguien borra tambien estos.
+def test_las_preguntas_de_usuarios_siguen_existiendo_como_modales():
+    """La prueba de arriba no vale nada si alguien se lleva por delante estas.
 
-    El reseteo de contrasena (`prompt`) y el borrado de usuario (`confirm`) son
-    acciones de admin puntuales y siguen siendo dialogos nativos a proposito."""
+    El reseteo de contrasena y el borrado de un usuario siguen preguntando: ya no
+    con `prompt()`/`confirm()` del navegador, sino con `pedirTexto()`/`confirmar()`
+    del panel (el detalle de cada uno lo cubre `test_confirmaciones.py`)."""
     bloque = _codigo("[data-uact]")
-    assert "prompt(" in bloque, "el reseteo de contrasena de un usuario usa prompt() a proposito"
-    assert "confirm(" in bloque, "el borrado de usuario pide confirmacion a proposito"
+    assert "pedirTexto(" in bloque, "el reseteo de contrasena tiene que pedirla en el modal"
+    assert "confirmar(" in bloque, "el borrado de usuario tiene que seguir preguntando"
     assert not [m for m in MARCAS_IA if m in bloque], \
         "el manejador de usuarios no deberia mezclarse con el flujo de la IA"
 

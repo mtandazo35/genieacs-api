@@ -332,6 +332,14 @@ main{width:100%;max-width:1760px;margin:0 auto;padding:1.5rem clamp(1rem,2.5vw,2
 .tag-none{background:var(--bg2);border:1px solid var(--line);color:var(--muted);
   padding:.15rem .5rem;border-radius:6px;font-size:.75rem;white-space:nowrap;cursor:help}
 
+/* ---------- catalogo portable de modelos (laboratorio -> produccion) ----------
+   El aviso de "esto no es un respaldo" tiene que caber sin empujar la tabla, y
+   la lista de ignorados sin estirar la pagina cuando el archivo trae cientos. */
+#cat-resultado:empty{display:none}
+#cat-resultado{margin-top:.6rem;line-height:1.5}
+#cat-resultado .adv-list{margin-top:.4rem;max-height:30vh}
+#cat-resultado .tag-warn{cursor:default}
+
 /* el generador de DHCP: formulario ancho y script a continuacion */
 #dhcp-form{max-width:none}
 #dhcp-script{margin-top:1rem;padding:1rem;font-size:.82rem;line-height:1.5;
@@ -415,3 +423,30 @@ main{width:100%;max-width:1760px;margin:0 auto;padding:1.5rem clamp(1rem,2.5vw,2
 #tuto-dhcp pre{margin:.6rem 0;padding:.8rem 1rem;font-size:.8rem;line-height:1.5;
   white-space:pre-wrap;word-break:break-word;background:var(--bg);border:1px solid var(--line);
   border-radius:var(--radius-sm);max-height:40vh;overflow:auto}
+/* ---------- confirmar una accion / pedir un dato ----------
+   confirm() y prompt() del navegador sacan una caja ajena al panel, rotulada
+   «JavaScript de "https://..."», sin formato y sin escapar nada; prompt()
+   ademas ensena la contrasena en claro por la pantalla. Estos dos modales los
+   sustituyen: heredan .modal (Esc, ::backdrop, clic fuera) y el boton de
+   confirmar toma el .danger (mismo --err que .danger-box de Energia) cuando la
+   accion no se puede deshacer. */
+#confirm-modal{width:min(480px,calc(100vw - 2rem))}
+#pedir-modal{width:min(440px,calc(100vw - 2rem))}
+.dlg-texto{font-size:.9rem;line-height:1.55;color:var(--txt)}
+.dlg-texto p{margin:0 0 .6rem}
+.dlg-texto p:last-child{margin-bottom:0}
+.dlg-texto code{font-size:.82rem;word-break:break-all}
+#pedir-modal label{display:block;margin-top:.2rem}
+#pedir-modal-error{margin-top:.45rem}
+
+/* ---------- Ajustes -> Respaldo ----------
+   Los dos respaldos se confunden, asi que el nombre de cada uno necesita
+   columna propia: la de .prof-dl (6.4rem) parte "Catalogo de modelos" en tres. */
+[data-spanel="respaldo"] .prof-dl > div{grid-template-columns:11rem 1fr}
+[data-spanel="respaldo"] .prof-dl dd{color:var(--muted);font-size:.85rem;line-height:1.5}
+@media (max-width:640px){
+  [data-spanel="respaldo"] .prof-dl > div{grid-template-columns:1fr;gap:.15rem}
+}
+
+/* la WAN que lleva el trafico, resaltada entre las demas */
+tr.wan-activa td{background:var(--ok-weak)}
