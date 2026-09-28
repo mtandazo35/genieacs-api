@@ -447,3 +447,6 @@ main{width:100%;max-width:1760px;margin:0 auto;padding:1.5rem clamp(1rem,2.5vw,2
 @media (max-width:640px){
   [data-spanel="respaldo"] .prof-dl > div{grid-template-columns:1fr;gap:.15rem}
 }
+
+/* la WAN que lleva el trafico, resaltada entre las demas */
+tr.wan-activa td{background:var(--ok-weak)}

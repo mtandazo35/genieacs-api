@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from ..deps import authorized_device
 from ..genieacs import genie
 from ..parammap import pick_map, resolve
-from ..treeprofile import WanNoSoportada, wan_current_ip, wan_write_values
+from ..treeprofile import WanNoSoportada, wan_current_ip, wan_write_values, coverage, wans
 from ..schemas import AccessIn, ActionResult, DnsIn, IpIn, PppoeIn, TimeIn, WanIn, WifiIn
 from .backup import merge_device_config
 
@@ -76,10 +76,16 @@ async def set_ip(device_id: str, body: IpIn, dev=Depends(authorized_device)):
 
 @router.get("/wan")
 async def get_wan(device_id: str, dev=Depends(authorized_device)):
-    """Lista las conexiones WAN del equipo (cuantas tiene y cual esta activa)."""
-    from .devices import wan_connections
-    conns = await wan_connections(device_id)
-    return {"count": len(conns), "connections": conns}
+    """TODAS las WAN configuradas del equipo, con su VLAN, modo y estado.
+
+    Antes solo miraba el arbol TR-098, asi que en un equipo TR-181 la pestana
+    WAN salia vacia. Se deduce del arbol, no por marca."""
+    doc = await genie.get_device(device_id)
+    conns = wans(doc or {})
+    return {"count": len(conns), "connections": conns,
+            # con el arbol sin refrescar no hay WAN que leer, y eso no es lo
+            # mismo que un equipo sin WAN: el panel lo dice de otra manera
+            "arbol": coverage(doc or {})}
 
 
 def _validar_estatico(body, ip_actual: str | None, device_id: str) -> None:

@@ -106,7 +106,9 @@ function renderDevices() {
     !q || (d.id + " " + (d.name || "") + " " + (d.customer || "") + " " + (d.model || "") + " " + (d.manufacturer || "") + " " + (d.tags || []).join(" ")).toLowerCase().includes(q));
   $("#device-empty").classList.toggle("hidden", S.devices.length > 0);
   list.innerHTML = items.map(d => {
-    const online = isRecent(d.last_inform);
+    // el servidor decide con el intervalo de ESE equipo; isRecent solo queda
+    // de red por si la lista viene de una version anterior
+    const online = d.online == null ? isRecent(d.last_inform) : d.online;
     const title = d.name || `${d.manufacturer || "?"} ${d.model || ""}`.trim();
     return `<div class="dev-card" data-id="${escAttr(d.id)}">
       <h3><span class="dot ${online ? "on" : "off"}"></span>${esc(title)}</h3>
@@ -395,20 +397,55 @@ $("#clients-refresh").addEventListener("click", async () => {
 
 // listar las conexiones WAN del equipo (cuantas y cual activa)
 async function loadWan() {
+  const box = $("#wan-list");
   try {
     const r = await api(`/devices/${enc(S.current)}/wan`);
-    const box = $("#wan-list");
-    if (!r.count) { box.innerHTML = ""; return; }
-    box.innerHTML = `<div class="wan-head">${r.count} conexión(es) WAN en el equipo:</div>` +
-      r.connections.map(c => `<div class="wan-row">${c.active ? "🟢" : "⚪"} <b>${esc(c.instance)}</b> — ${esc(c.type || "?")} · ${esc(c.status || "?")}${c.ip ? " · " + esc(c.ip) : ""}${c.active ? ' <span class="wan-active">activa</span>' : ""}</div>`).join("");
+    if (!r.count) {
+      // sin arbol no hay WAN que leer, que no es lo mismo que no tener WAN
+      const pocos = (r.arbol && r.arbol.params) || 0;
+      box.innerHTML = pocos < 100
+        ? `<p class="muted small">El ACS solo tiene ${pocos} parámetros de este equipo: todavía no
+           se puede saber qué WAN tiene. Pulsa <b>Actualizar desde el equipo</b> y vuelve en un minuto.</p>`
+        : `<p class="muted small">Este equipo no reporta ninguna interfaz de lado WAN.</p>`;
+      return;
+    }
+    box.innerHTML = `<div class="wan-head">${r.count} conexión(es) WAN configuradas:</div>`
+      + `<div class="tbl-wrap"><table class="tbl"><thead><tr>
+           <th>Interfaz</th><th>VLAN</th><th>Modo</th><th>IP</th><th>Estado</th><th>Gateway / DNS</th>
+         </tr></thead><tbody>`
+      + r.connections.map(c => {
+          const nombre = c.nombre || c.instancia || "?";
+          const gw = [c.gateway, c.dns].filter(Boolean).join(" · ");
+          const estado = c.incompleta
+            ? `<span class="tag-none" title="El ACS trajo solo la IP de esta interfaz: falta leer el resto del árbol">sin datos</span>`
+            : esc(c.estado || "?");
+          return `<tr${c.activa ? ' class="wan-activa"' : ""}>
+            <td><b>${esc(nombre)}</b>${c.activa ? ' <span class="wan-active">activa</span>' : ""}
+                ${c.usuario ? `<div class="muted small">${esc(c.usuario)}</div>` : ""}</td>
+            <td class="num">${c.vlan ? esc(c.vlan) : '<span class="muted">—</span>'}</td>
+            <td>${esc(c.modo || "?")}</td>
+            <td>${c.ip ? `<code>${esc(c.ip)}</code>` : '<span class="muted">sin IP</span>'}</td>
+            <td>${estado}${c.estado_cliente === "Disabled" ? ' <span class="muted small">(cliente apagado)</span>' : ""}</td>
+            <td class="muted small">${gw ? esc(gw) : "—"}</td>
+          </tr>`;
+        }).join("")
+      + `</tbody></table></div>`;
     prefillWanForm();
-  } catch (e) { /* silencioso */ }
+  } catch (e) {
+    // que falle no puede quedar en nada: la pestana vacia parecia un equipo sin WAN
+    box.innerHTML = `<p class="muted small">No se pudo leer la WAN: ${esc(e.message)}</p>`;
+  }
 }
 
 // refrescar la WAN real del equipo (evita datos cacheados viejos)
 async function wanRefreshFromDevice(silent) {
   try {
-    await api(`/devices/${enc(S.current)}/refresh?object=${encodeURIComponent("InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1")}`, { method: "POST" });
+    // el objeto a refrescar depende del modelo de datos del equipo: pedir el de
+    // TR-098 en un TR-181 no trae nada y la pestana se quedaba igual de vacia
+    const raiz = (lastStatus && lastStatus.tree && lastStatus.tree.root) || "";
+    const objeto = raiz === "Device" ? "Device.IP.Interface"
+                                     : "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1";
+    await api(`/devices/${enc(S.current)}/refresh?object=${encodeURIComponent(objeto)}`, { method: "POST" });
     for (let i = 0; i < 5; i++) {
       await new Promise(r => setTimeout(r, 2500));
       await loadWan();
@@ -2232,6 +2269,16 @@ function fmtFecha(iso) {
 
 function fmtDate(iso) { if (!iso) return "-"; const d = new Date(iso); return isNaN(d) ? iso : d.toLocaleString(); }
 function isRecent(iso) { if (!iso) return false; return (Date.now() - new Date(iso).getTime()) < 15 * 60 * 1000; }
+
+// "hace 7 min": el dato que faltaba para no tener que restar fechas a ojo
+function haceCuanto(seg) {
+  if (seg == null) return "nunca ha reportado";
+  if (seg < 90) return "hace " + seg + " s";
+  const m = Math.round(seg / 60);
+  if (m < 90) return "hace " + m + " min";
+  const h = Math.round(m / 60);
+  return h < 48 ? "hace " + h + " h" : "hace " + Math.round(h / 24) + " días";
+}
 function fmtUptime(s) { if (s == null) return "-"; s = +s; const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60); return `${d}d ${h}h ${m}m`; }
 
 // ===== Arranque =====
