@@ -242,3 +242,22 @@ def test_el_panel_ofrece_los_modelos_del_proveedor():
     assert "data-modelo" in PANEL_JS and 'id="llm-modelos-chips"' in PANEL_HTML
     # un chip sin estilo sale como un boton crudo en medio del formulario
     assert ".chips" in PANEL_CSS and ".chip{" in PANEL_CSS
+
+
+def test_no_se_ofrecen_modelos_que_no_saben_chatear():
+    """Groq sirve tambien whisper (audio) y los *guard (clasificadores). Elegir
+    uno de esos hace fallar la prueba sin que se entienda por que: la lista de
+    Groq del 2026-09-27 traia 9 modelos y solo 3 servian para proponer mapeos."""
+    assert "NO_SON_DE_CHAT" in PANEL_JS
+    import re
+    m = re.search(r"const NO_SON_DE_CHAT = /([^/]+)/i", PANEL_JS)
+    assert m, "el filtro tiene que ser una expresion regular legible"
+    patron = re.compile(m.group(1), re.I)
+    for malo in ("whisper-large-v3", "meta-llama/llama-prompt-guard-2-22m",
+                 "canopylabs/orpheus-v1-english", "text-embedding-3-small"):
+        assert patron.search(malo), f"{malo} deberia filtrarse"
+    for bueno in ("openai/gpt-oss-120b", "llama-3.3-70b-versatile", "qwen/qwen3.8-27b",
+                  "allam-2-7b", "gpt-4o-mini"):
+        assert not patron.search(bueno), f"{bueno} NO deberia filtrarse"
+    # y si todos se filtraran, se ensenan igual antes que dejar la lista vacia
+    assert "utiles.length ? utiles : modelos" in PANEL_JS
