@@ -33,8 +33,9 @@ def test_lo_que_toca_servidores_solo_lo_ve_el_admin():
         """La etiqueta completa, no solo lo que va despues del atributo."""
         return re.search(rf'<[^>]*{atributo}="{valor}"[^>]*>', seccion).group(0)
 
-    # dhcp = el tutorial de Option 43: lleva la URL del ACS, asi que tambien es de admin
-    for panel in ("acs", "ia", "dhcp"):
+    # dhcp = el tutorial de Option 43 (comandos del router); respaldo = el
+    # catalogo de modelos que se lleva a otra instalacion: las dos son de admin
+    for panel in ("acs", "ia", "dhcp", "respaldo"):
         assert "admin-only" in etiqueta("data-ssub", panel), f"la pestaña {panel} deberia ser admin-only"
         assert "admin-only" in etiqueta("data-spanel", panel), f"el panel {panel} deberia ser admin-only"
     assert "admin-only" not in etiqueta("data-ssub", "cuenta"), "Mi cuenta es para todos"
@@ -45,7 +46,7 @@ def test_lo_que_toca_servidores_solo_lo_ve_el_admin():
 def test_cada_subpestana_tiene_su_panel():
     subs = set(re.findall(r'data-ssub="(\w+)"', HTML))
     paneles = set(re.findall(r'data-spanel="(\w+)"', HTML))
-    assert subs == paneles == {"cuenta", "tema", "acs", "ia", "dhcp"}
+    assert subs == paneles == {"cuenta", "tema", "acs", "ia", "dhcp", "respaldo"}
 
 
 def test_quien_tenia_guardada_la_vista_mi_cuenta_no_se_queda_en_blanco():

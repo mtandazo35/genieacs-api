@@ -311,7 +311,8 @@ def get_model_profile(key: str) -> dict | None:
 
 
 def upsert_model_profile(key: str, manufacturer, product_class, model, firmware,
-                         profile_json: str, device_seen: str | None = None) -> None:
+                         profile_json: str, device_seen: str | None = None,
+                         devices: int = 1) -> None:
     """Guarda el perfil deducido de un modelo. No pisa las correcciones manuales.
 
     `devices` cuenta equipos distintos vistos con este perfil; para eso se guarda
@@ -319,11 +320,11 @@ def upsert_model_profile(key: str, manufacturer, product_class, model, firmware,
     with connect() as c:
         c.execute(
             "INSERT INTO model_profile (key, manufacturer, product_class, model, firmware, "
-            "profile, devices, updated_at) VALUES (?,?,?,?,?,?,1,datetime('now')) "
+            "profile, devices, updated_at) VALUES (?,?,?,?,?,?,?,datetime('now')) "
             "ON CONFLICT(key) DO UPDATE SET profile=excluded.profile, "
             "manufacturer=excluded.manufacturer, product_class=excluded.product_class, "
             "model=excluded.model, firmware=excluded.firmware, updated_at=datetime('now')",
-            (key, manufacturer, product_class, model, firmware, profile_json),
+            (key, manufacturer, product_class, model, firmware, profile_json, devices),
         )
 
 
@@ -448,6 +449,19 @@ def model_tree_devices(key: str) -> list[dict]:
         return [dict(r) for r in c.execute(
             "SELECT device_id, n_params, seen_at FROM model_tree_device WHERE key=? "
             "ORDER BY n_params DESC, seen_at DESC", (key,))]
+
+
+def model_trees_completos() -> list[dict]:
+    """Arbol + perfil + correcciones de cada modelo, para exportar.
+
+    Sin nada de equipos: el catalogo es del modelo, no de la flota."""
+    with connect() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT t.key, t.root, t.paths, t.n_params, "
+            "       p.manufacturer, p.product_class, p.model, p.firmware, "
+            "       p.profile, p.overrides "
+            "FROM model_tree t LEFT JOIN model_profile p ON p.key=t.key "
+            "ORDER BY t.key")]
 
 
 def list_model_trees() -> list[dict]:

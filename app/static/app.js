@@ -482,7 +482,12 @@ async function backupSave() {
   toast("✓ " + (r.detail || "Respaldo guardado"), "ok"); loadBackup();
 }
 async function backupRestore() {
-  if (!confirm("¿Restaurar la configuración guardada en el equipo?")) return;
+  if (!await confirmar({
+    titulo: "Restaurar la configuración",
+    texto: "<p>Se le va a cargar al equipo la <b>configuración guardada</b> en el panel. <b>Lo que tenga ahora se sobrescribe</b> y puede reiniciarse al aplicarla: no hay vuelta atrás si la guardada era peor.</p>",
+    ok: "Restaurar",
+    peligro: true,
+  })) return;
   const r = await api(`/devices/${enc(S.current)}/restore`, { method: "POST" });
   if (r.ok === false) return toast(r.detail, "err");
   report(r); refreshAfterChange(r);
@@ -670,7 +675,12 @@ const actions = {
   async wan() {
     const mode = $("#wan-mode").value;
     const body = { mode };
-    let aviso = "¿Aplicar WAN por DHCP?";
+    // el aviso es el objeto que espera confirmar(): cada modo cuenta lo suyo
+    let aviso = {
+      titulo: "Aplicar WAN por DHCP",
+      texto: "<p>La WAN del equipo pasará a pedir su dirección por <b>DHCP</b>. Si ahora tiene IP fija, la pierde y el enlace se corta un momento mientras la renegocia.</p>",
+      ok: "Aplicar DHCP",
+    };
     if (mode === "static") {
       body.ip = $("#wan-ip").value.trim();
       body.mask = $("#wan-mask").value.trim();
@@ -679,14 +689,24 @@ const actions = {
       if (dns.length) body.dns = dns;
       if ($("#wan-mtu").value) body.mtu = +$("#wan-mtu").value;
       if (!body.ip || !body.mask || !body.gateway) return toast("IP, máscara y gateway son obligatorios en estático", "err");
-      aviso = "⚠ VAS A PONER IP ESTÁTICA EN LA WAN.\n\nLa IP debe ser de la MISMA red por la que el equipo llega al ACS, o perderás la gestión remota.\n\n¿Continuar?";
+      aviso = {
+        titulo: "Poner IP estática en la WAN",
+        texto: `<p>La WAN queda fijada en <code>${esc(body.ip)}</code> / <code>${esc(body.mask)}</code> con gateway <code>${esc(body.gateway)}</code>.</p>`
+             + `<p><b>Esa IP tiene que ser de la misma red por la que el equipo llega al ACS.</b> Si no lo es, el equipo desaparece del panel y hay que ir al sitio a recuperarlo.</p>`,
+        ok: "Aplicar IP estática",
+        peligro: true,
+      };
     } else if (mode === "pppoe") {
       body.username = $("#wanppp-user").value.trim();
       body.password = $("#wanppp-pass").value;
       if (!body.username) return toast("Usuario PPPoE requerido", "err");
-      aviso = "¿Aplicar WAN por PPPoE con el usuario " + body.username + "?";
+      aviso = {
+        titulo: "Aplicar WAN por PPPoE",
+        texto: `<p>La WAN pasará a marcar por <b>PPPoE</b> con el usuario <code>${esc(body.username)}</code>. La conexión actual se corta mientras vuelve a autenticarse; si el usuario o la clave no son los del proveedor, el equipo se queda sin Internet.</p>`,
+        ok: "Aplicar PPPoE",
+      };
     }
-    if (!confirm(aviso)) return;
+    if (!await confirmar(aviso)) return;
     const r = await api(`/devices/${enc(S.current)}/wan`, { method: "PUT", body });
     report(r);
     clearInputs("wan-ip", "wan-mask", "wan-gw", "wan-dns", "wan-mtu");
@@ -699,7 +719,14 @@ const actions = {
     if ($("#acc-remoteport").value) body.remote_port = +$("#acc-remoteport").value;
     if ($("#acc-user").value.trim()) body.admin_user = $("#acc-user").value.trim();
     if ($("#acc-pass").value) body.admin_password = $("#acc-pass").value;
-    if (body.remote_enable && !confirm("Vas a permitir la administración del equipo por WAN (Internet). ¿Continuar?")) return;
+    const puerto = body.remote_port ? ` en el puerto <code>${esc(body.remote_port)}</code>` : "";
+    if (body.remote_enable && !await confirmar({
+      titulo: "Abrir la administración por WAN",
+      texto: `<p>La interfaz de administración del equipo quedará accesible <b>desde Internet</b> por ${esc(body.remote_protocol)}${puerto}.</p>`
+           + `<p>Cualquiera que llegue a su IP pública podrá intentar entrar. Hazlo solo con una contraseña fuerte y quítalo cuando acabes.</p>`,
+      ok: "Abrir por WAN",
+      peligro: true,
+    })) return;
     const r = await api(`/devices/${enc(S.current)}/access`, { method: "PUT", body });
     report(r); refreshAfterChange(r);
     clearInputs("acc-pass");
@@ -723,12 +750,22 @@ const actions = {
   async fw() {
     const f = $("#fw-file").value;
     if (!f) return toast("No hay firmware seleccionado", "err");
-    if (!confirm("¿Enviar la actualización " + f + " al equipo?")) return;
+    if (!await confirmar({
+      titulo: "Enviar la actualización al equipo",
+      texto: `<p>Se le envía el archivo <code>${esc(f)}</code>. El equipo lo instala y se reinicia solo, y <b>tarda varios minutos</b>: si pierde la corriente mientras escribe la memoria puede quedar inservible.</p>`,
+      ok: "Enviar la actualización",
+      peligro: true,
+    })) return;
     report(await api(`/devices/${enc(S.current)}/firmware`, { method: "POST", body: { file_name: f } }));
   },
   async read() { await readDevice(false); },
   async reboot() {
-    if (!confirm("¿Reiniciar el equipo ahora?")) return;
+    if (!await confirmar({
+      titulo: "Reiniciar el equipo",
+      texto: "<p>El equipo se reinicia ahora mismo: el abonado <b>se queda sin servicio</b> alrededor de un minuto.</p>",
+      ok: "Reiniciar ahora",
+      peligro: true,
+    })) return;
     report(await api(`/devices/${enc(S.current)}/reboot`, { method: "POST" }));
   },
   async ["sched-set"]() {
@@ -799,9 +836,18 @@ document.addEventListener("click", async (e) => {
   const u = b.dataset.u, act = b.dataset.uact;
   try {
     if (act === "pass") {
-      const p = prompt("Nueva contraseña para " + u + " (mín. 12):");
+      // el minimo de 12 lo valida el propio modal antes de cerrarse: ya no hace
+      // falta comprobarlo aqui ni avisar con un toast cuando ya se escribio
+      const p = await pedirTexto({
+        titulo: "Nueva contraseña",
+        texto: `<p>Contraseña nueva para el usuario <b>${esc(u)}</b>. Mínimo 12 caracteres; sus sesiones abiertas seguirán valiendo hasta que caduquen.</p>`,
+        campo: "Contraseña nueva",
+        tipo: "password",
+        placeholder: "mínimo 12 caracteres",
+        ok: "Cambiar la contraseña",
+        minimo: 12,
+      });
       if (!p) return;
-      if (p.length < 12) return toast("Mínimo 12 caracteres", "err");
       await api(`/auth/users/${encodeURIComponent(u)}/password`, { method: "PUT", body: { new_password: p } });
       toast("✓ Contraseña actualizada", "ok");
     } else if (act === "toggle") {
@@ -809,7 +855,12 @@ document.addEventListener("click", async (e) => {
       await api(`/auth/users/${encodeURIComponent(u)}/active`, { method: "POST", body: { active } });
       toast("✓ Estado actualizado", "ok"); loadUsers();
     } else if (act === "del") {
-      if (!confirm("¿Eliminar al usuario " + u + "?")) return;
+      if (!await confirmar({
+        titulo: "Eliminar usuario",
+        texto: `<p>Se borra la cuenta <b>${esc(u)}</b> del panel. Deja de poder entrar de inmediato y no se puede deshacer: habría que volver a crearla.</p>`,
+        ok: "Eliminar usuario",
+        peligro: true,
+      })) return;
       await api(`/auth/users/${encodeURIComponent(u)}`, { method: "DELETE" });
       toast("✓ Usuario eliminado", "ok"); loadUsers();
     }
@@ -1144,7 +1195,16 @@ document.addEventListener("submit", async (e) => {
       if (target === "all") body.all = true;
       if (target === "tag") body.tag = val;
       if (target === "model") body.model = val;
-      if (!confirm("¿Enviar " + file + " a los equipos seleccionados?")) return;
+      const destino = target === "all" ? "<b>todos los equipos</b>"
+                    : target === "tag" ? `los equipos del ISP <code>${esc(val)}</code>`
+                    : `los equipos del modelo <code>${esc(val)}</code>`;
+      if (!await confirmar({
+        titulo: "Enviar el archivo a varios equipos",
+        texto: `<p>Se va a enviar <code>${esc(file)}</code> a ${destino}.</p>`
+             + `<p>Cada equipo lo instala y se reinicia por su cuenta, así que <b>cortan servicio</b> a la vez. La tarea no se puede cancelar a medias.</p>`,
+        ok: "Enviar a los equipos",
+        peligro: true,
+      })) return;
       const el = form.querySelector(".pf-result"); el.textContent = "Enviando…"; el.style.color = "var(--muted)";
       try {
         const r = await api("/firmware/push", { method: "POST", body });
@@ -1170,7 +1230,12 @@ document.addEventListener("click", async (e) => {
   const b = e.target.closest("[data-fwdel]");
   if (!b) return;
   const name = b.dataset.fwdel;
-  if (!confirm("¿Borrar el archivo " + name + "?")) return;
+  if (!await confirmar({
+    titulo: "Borrar el archivo",
+    texto: `<p>Se borra <code>${esc(name)}</code> del almacén del panel. Los equipos que ya lo tengan instalado no se ven afectados, pero no se podrá volver a enviar sin subirlo otra vez.</p>`,
+    ok: "Borrar el archivo",
+    peligro: true,
+  })) return;
   try { await api(`/firmware/${encodeURIComponent(name)}`, { method: "DELETE" }); toast("Borrado", "ok"); loadUpdates(); }
   catch (err) { toast(err.message, "err"); }
 });
@@ -1256,6 +1321,119 @@ $$("dialog.modal").forEach(d => d.addEventListener("click", (e) => {
   if (e.target === d) cerrarModal(d);
 }));
 
+// ---- Confirmar una accion / pedir un dato (en el panel, no en el navegador) ----
+// confirm() y prompt() nativos sacan una caja del navegador con la cabecera
+// «JavaScript de "https://10.x.x.x"», no se pueden redactar ni dar formato, y
+// prompt() ensena la contrasena en claro. Estos dos helpers usan los <dialog>
+// del panel y devuelven una PROMESA, asi que el sitio de llamada solo cambia
+// `if (confirm(x))` por `if (await confirmar({...}))` sin reescribir su logica.
+//
+// El `texto` se inserta como HTML para poder marcar en negrita lo que va a
+// pasar: todo dato que venga del equipo o del usuario se pasa por esc() en el
+// sitio de llamada.
+let confirmarResolver = null;
+
+function confirmar({ titulo = "Confirmar", texto = "", ok = "Continuar", cancelar = "Cancelar", peligro = false } = {}) {
+  const d = $("#confirm-modal");
+  // doble clic o dos avisos encadenados: el anterior se da por cancelado y se
+  // reutiliza el modal ya abierto (showModal() sobre un dialog abierto lanza)
+  if (confirmarResolver) { const prev = confirmarResolver; confirmarResolver = null; prev(false); }
+  $("#confirm-modal-titulo").textContent = titulo;
+  $("#confirm-modal-texto").innerHTML = texto;
+  const btn = $("#confirm-modal-ok");
+  btn.textContent = ok;
+  btn.classList.toggle("danger", !!peligro);   // rojo: la accion no se deshace
+  $("#confirm-modal-cancelar").textContent = cancelar;
+  return new Promise(resolve => {
+    confirmarResolver = resolve;
+    // El evento `close` es la UNICA salida del modal, y cubre todas: el boton,
+    // Cancelar, Esc, el clic en el fondo oscuro y cerrarDialogos() cuando caduca
+    // la sesion. Resolver aqui (y no en el click de cada boton) es lo que
+    // garantiza que ninguna promesa se quede colgada esperando para siempre.
+    d.addEventListener("close", () => {
+      if (confirmarResolver !== resolve) return resolve(false);   // aviso ya superado
+      confirmarResolver = null;
+      resolve(d.returnValue === "ok");   // Esc y Cancelar no dejan returnValue: false
+    }, { once: true });
+    abrirDialogo(d);
+    btn.focus();
+  });
+}
+
+// pedirTexto: el prompt(). Devuelve el texto o null si se cancela.
+// `tipo: "password"` -> campo enmascarado; `minimo` se valida ANTES de cerrar y
+// el error se pinta dentro del modal, no en un toast que ya llega tarde.
+let pedirResolver = null, pedirMinimo = 0, pedirTipo = "text", pedirValor = null;
+
+function pedirTexto({ titulo = "Escribe un valor", texto = "", campo = "Valor", tipo = "text",
+                     placeholder = "", ok = "Guardar", cancelar = "Cancelar", minimo = 0, valor = "" } = {}) {
+  const d = $("#pedir-modal"), inp = $("#pedir-modal-input");
+  if (pedirResolver) { const prev = pedirResolver; pedirResolver = null; prev(null); }
+  $("#pedir-modal-titulo").textContent = titulo;
+  $("#pedir-modal-texto").innerHTML = texto;
+  $("#pedir-modal-campo").textContent = campo;
+  pedirTipo = tipo; pedirMinimo = minimo; pedirValor = null;
+  inp.type = tipo;
+  inp.placeholder = placeholder;
+  inp.value = valor;
+  inp.autocomplete = tipo === "password" ? "new-password" : "off";
+  if (minimo) inp.minLength = minimo; else inp.removeAttribute("minlength");
+  $("#pedir-modal-ok").textContent = ok;
+  $("#pedir-modal-cancelar").textContent = cancelar;
+  pedirError("");
+  return new Promise(resolve => {
+    pedirResolver = resolve;
+    // igual que en confirmar(): el `close` es la unica salida, asi que Esc, el
+    // clic fuera y cerrarDialogos() resuelven la promesa (a null) en vez de
+    // dejarla colgada. El valor lo dejo pedirAceptar() tras validar el minimo.
+    d.addEventListener("close", () => {
+      if (pedirResolver !== resolve) return resolve(null);        // peticion ya superada
+      const v = pedirValor;
+      pedirResolver = null; pedirValor = null;
+      inp.value = "";                    // no dejar la contrasena colgando en el DOM
+      resolve(d.returnValue === "ok" ? v : null);
+    }, { once: true });
+    abrirDialogo(d);
+    inp.focus(); inp.select();
+  });
+}
+
+function pedirError(msg) {
+  const err = $("#pedir-modal-error");
+  err.textContent = msg || "";
+  err.classList.toggle("hidden", !msg);
+}
+
+function pedirAceptar() {
+  const inp = $("#pedir-modal-input");
+  const v = pedirTipo === "password" ? inp.value : inp.value.trim();
+  const falla = !v ? "Escribe un valor para continuar"
+              : (pedirMinimo && v.length < pedirMinimo)
+                ? `Mínimo ${pedirMinimo} caracteres (llevas ${v.length})`
+                : null;
+  // mientras no valga, el modal NO se cierra: el aviso se lee donde se escribe
+  if (falla) { pedirError(falla); inp.focus(); return; }
+  pedirValor = v;
+  $("#pedir-modal").close("ok");
+}
+
+function abrirDialogo(d) {
+  if (d.open) return;               // ya abierto: se reutiliza con el texto nuevo
+  d.returnValue = "";
+  if (typeof d.showModal === "function") d.showModal();
+  else if (typeof d.show === "function") d.show();
+  else d.setAttribute("open", "");
+}
+
+// Los botones de confirmar solo cierran el dialogo con returnValue: el `close`
+// de cada funcion es quien resuelve. Cancelar lleva `data-close` y lo cierra el
+// manejador generico de los modales, sin returnValue, que es el "no".
+$("#confirm-modal-ok").addEventListener("click", () => $("#confirm-modal").close("ok"));
+$("#pedir-modal-ok").addEventListener("click", pedirAceptar);
+$("#pedir-modal-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); pedirAceptar(); }
+});
+
 // ---- Ajustes: subpestañas (Mi cuenta, Tema, y lo de admin) ----
 function ajustesSub(sub) {
   $$("#settings-tabs .subtab").forEach(b => b.classList.toggle("active", b.dataset.ssub === sub));
@@ -1263,6 +1441,9 @@ function ajustesSub(sub) {
   if (sub === "cuenta") loadAccount();
   if (sub === "acs") loadSettings();
   if (sub === "ia") loadLlm();
+  // Respaldo no consulta nada al entrar: se limpia el resultado de la vez
+  // anterior para no ensenar el recuento de una importacion vieja
+  if (sub === "respaldo" && $("#cat-resultado")) $("#cat-resultado").innerHTML = "";
 }
 
 $("#settings-tabs").addEventListener("click", (e) => {
@@ -1332,7 +1513,12 @@ $("#llm-form").addEventListener("submit", async (e) => {
 });
 
 $("#llm-clear").addEventListener("click", async () => {
-  if (!confirm("¿Borrar la clave guardada? La propuesta por IA quedará desactivada.")) return;
+  if (!await confirmar({
+    titulo: "Borrar la clave del proveedor de IA",
+    texto: "<p>Se borra la clave guardada en el servidor. La <b>propuesta de mapeo con IA</b> (Aprovisionamiento → Perfiles de modelo) queda desactivada hasta que pongas otra.</p>",
+    ok: "Borrar la clave",
+    peligro: true,
+  })) return;
   try { await api("/settings/llm", { method: "PUT", body: { api_key: "" } }); toast("Clave borrada", "ok"); loadLlm(); }
   catch (err) { toast(err.message, "err"); }
 });
@@ -1400,7 +1586,7 @@ async function loadDescubrimiento() {
     $("#disc-rules").querySelector("tbody").innerHTML = reglas.length
       ? reglas.map(r => `<tr><td><code>${esc(r.cidr)}</code></td><td>${esc(r.isp_tag)}</td>
           <td class="muted small">${esc(r.comment || "")}</td>
-          <td><button class="ghost small" data-rule="${r.id}">Borrar</button></td></tr>`).join("")
+          <td><button class="ghost small" data-rule="${r.id}" data-cidr="${escAttr(r.cidr)}" data-tag="${escAttr(r.isp_tag)}">Borrar</button></td></tr>`).join("")
       : `<tr><td class="muted">Sin rangos configurados: sin ellos no se puede sugerir nada.</td></tr>`;
     const eq = d.equipos || [];
     $("#disc-list").querySelector("tbody").innerHTML = eq.length
@@ -1430,6 +1616,14 @@ $("#disc-rule-form").addEventListener("submit", async (e) => {
 
 $("#disc-rules").addEventListener("click", async (e) => {
   const b = e.target.closest("[data-rule]"); if (!b) return;
+  // borrar un rango deja de asignar tag a los equipos que caian en el: se pregunta
+  if (!await confirmar({
+    titulo: "Borrar el rango",
+    texto: `<p>Se borra el rango <code>${esc(b.dataset.cidr || "")}</code> del ISP <b>${esc(b.dataset.tag || "?")}</b>.</p>`
+         + `<p>Los equipos que ya tengan su tag lo conservan, pero los nuevos que caigan en ese rango <b>dejarán de recibirlo</b>.</p>`,
+    ok: "Borrar el rango",
+    peligro: true,
+  })) return;
   try { await api(`/discovery/rules/${b.dataset.rule}`, { method: "DELETE" }); loadDescubrimiento(); }
   catch (err) { toast(err.message, "err"); }
 });
@@ -1810,6 +2004,144 @@ function nombreArchivo(s) {
   return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
     .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "modelo";
 }
+
+// ---- catalogo portable de modelos (laboratorio -> produccion) ----
+// Lo que viaja es el CATALOGO, no la flota: rutas, perfil deducido y
+// correcciones a mano. Sin equipos, sin seriales y sin credenciales, asi que
+// esto no es un respaldo de la BD y no hay que venderlo como tal.
+
+// un archivo de catalogo sano son unos megas; mas arriba es el archivo
+// equivocado, y leerlo entero en memoria antes de descubrirlo no ayuda
+const CAT_MAX_BYTES = 40 * 1024 * 1024;
+const CAT_MAX_IGNORADOS = 200;   // lo que se pinta; el total se dice aparte
+
+// fecha local, no UTC: el archivo lo nombra quien lo descarga, y ver el dia de
+// ayer porque el navegador cuenta en UTC es justo lo que confunde al comparar
+// dos exportaciones
+function hoyISO() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+// file.text() no existe en navegadores viejos: FileReader de respaldo, y con el
+// onerror puesto, porque si no un archivo ilegible deja la promesa colgada y los
+// botones deshabilitados para siempre
+function leerTexto(file) {
+  if (typeof file.text === "function") return file.text();
+  return new Promise((ok, err) => {
+    const fr = new FileReader();
+    fr.onload = () => ok(String(fr.result || ""));
+    fr.onerror = () => err(new Error("No se pudo leer ese archivo del disco."));
+    fr.readAsText(file);
+  });
+}
+
+async function exportarCatalogo() {
+  const b = $("#cat-exportar");
+  const salida = $("#cat-resultado");
+  b.disabled = true;
+  try {
+    const r = await api("/trees/export");
+    const modelos = (r && Array.isArray(r.modelos)) ? r.modelos : [];
+    if (!modelos.length) {
+      // bajar un archivo con cero modelos es peor que no bajar nada: en
+      // produccion se importaria creyendo que se llevo algo
+      salida.innerHTML = `<span class="tag-warn">nada que exportar</span> <span class="muted">No hay ningún árbol guardado todavía: abre la ficha de algún equipo y su modelo aparecerá arriba.</span>`;
+      return;
+    }
+    const nombre = `catalogo-modelos-${hoyISO()}.json`;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(r, null, 2)], { type: "application/json" }));
+    a.download = nombre;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    const rutas = modelos.reduce((n, m) => n + Object.keys((m && m.paths) || {}).length, 0);
+    salida.innerHTML = esc(`${nombre}: ${modelos.length} modelo(s) y ${rutas} ruta(s). `
+      + `Sin equipos, sin seriales y sin credenciales: no es un respaldo de la base de datos.`)
+      // filas con el arbol guardado ilegible: no van en el archivo, y callarlo
+      // dejaria un catalogo mas corto sin explicacion
+      + (r.ilegibles ? ` <span class="tag-warn">${esc(r.ilegibles)} sin exportar</span> `
+          + `<span class="muted">Ese modelo tiene el árbol guardado ilegible; se rehace al abrir `
+          + `la ficha de un equipo suyo, y entonces ya se puede exportar.</span>` : "");
+  } catch (e) {
+    toast(e.message, "err");
+    salida.textContent = e.message;
+  } finally { b.disabled = false; }
+}
+
+async function importarCatalogo(file) {
+  if (!file) return;
+  const botones = [$("#cat-exportar"), $("#cat-importar-btn")];
+  const salida = $("#cat-resultado");
+  botones.forEach(b => { b.disabled = true; });
+  salida.innerHTML = `<span class="muted">Leyendo ${esc(file.name)}…</span>`;
+  try {
+    if (file.size > CAT_MAX_BYTES) {
+      throw new Error(`Ese archivo pesa ${(file.size / 1048576).toFixed(1)} MB: un catálogo de modelos no llega a tanto. Comprueba que es el .json exportado desde aquí.`);
+    }
+    // El JSON se valida AQUI: un archivo cortado a medias o un .json que no es
+    // un catalogo se explica con su nombre delante, no como un 422 del servidor
+    const texto = await leerTexto(file);
+    let doc;
+    try { doc = JSON.parse(texto); }
+    catch { throw new Error(`«${file.name}» no es JSON válido: ¿se cortó al copiarlo, o es otro archivo?`); }
+    if (!doc || typeof doc !== "object" || Array.isArray(doc)) {
+      throw new Error("El archivo no contiene un catálogo: se esperaba un objeto JSON con «formato» y «modelos».");
+    }
+    if (doc.formato === undefined || doc.formato === null) {
+      throw new Error("Al archivo le falta el campo «formato»: no parece un catálogo exportado por esta API.");
+    }
+    if (!Array.isArray(doc.modelos)) {
+      throw new Error("Al archivo le falta la lista «modelos», o no es una lista.");
+    }
+    if (!doc.modelos.length) {
+      throw new Error("El archivo trae la lista «modelos» vacía: no hay nada que importar.");
+    }
+
+    salida.innerHTML = `<span class="muted">Importando ${doc.modelos.length} modelo(s) de ${esc(file.name)}…</span>`;
+    // solo formato y modelos: `generado` es informativo y el servidor no lo lee
+    const r = await api("/trees/import",
+      { method: "POST", body: { formato: doc.formato, modelos: doc.modelos } });
+
+    // ojo: `ignorados` sale de un archivo que alguien te pasa -> esc() siempre
+    const ign = Array.isArray(r.ignorados) ? r.ignorados : [];
+    const cuenta = [
+      `${r.modelos ?? 0} modelo(s) importado(s)`,
+      `${r.nuevos ?? 0} que no estaban aquí`,
+      `${r.rutas_nuevas ?? 0} ruta(s) nueva(s)`,
+      `${r.perfiles_nuevos ?? 0} perfil(es) deducido(s)`,
+      `${r.correcciones ?? 0} corrección(es) a mano`,
+    ].join(" · ");
+    let html = `<div><b>${esc(file.name)}</b> — ${esc(cuenta)}.</div>`;
+    if (ign.length) {
+      const muestra = ign.slice(0, CAT_MAX_IGNORADOS);
+      html += `<div class="muted small" style="margin-top:.5rem">${ign.length} entrada(s) ignorada(s) (sin clave, sin rutas o con demasiadas rutas)`
+        + (muestra.length < ign.length ? `; se listan las ${muestra.length} primeras` : "") + `:</div>`
+        + `<div class="adv-list">` + muestra.map(x =>
+            `<div class="adv-row"><div class="adv-path">${esc(x)}</div></div>`).join("")
+        + `</div>`;
+    } else {
+      html += `<div class="muted small">Ninguna entrada ignorada.</div>`;
+    }
+    salida.innerHTML = html;
+    await loadArboles();
+  } catch (e) {
+    toast(e.message, "err");
+    salida.innerHTML = `<span class="tag-warn">no se importó</span> ${esc(e.message)}`;
+  } finally {
+    botones.forEach(b => { b.disabled = false; });
+    // sin esto, elegir el MISMO archivo otra vez no dispara `change`
+    $("#cat-importar").value = "";
+  }
+}
+
+$("#cat-exportar").addEventListener("click", exportarCatalogo);
+$("#cat-importar-btn").addEventListener("click", () => $("#cat-importar").click());
+$("#cat-importar").addEventListener("change", (e) => {
+  const f = e.target.files && e.target.files[0];
+  if (f) importarCatalogo(f);
+});
 
 // ---- DHCP / Option 43 ----
 function filaRed(v = {}) {

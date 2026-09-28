@@ -84,9 +84,88 @@ La BD se migra sola al arrancar (columnas nuevas; no se pierde nada).
 
 - Estado/logs: `systemctl status genieacs-api` · `journalctl -u genieacs-api -f` (los errores del auto-restore y de la auditoría ya no se silencian: salen aquí).
 - Usuarios sin panel: `./.venv/bin/python manage.py init-admin|add-isp|list|disable`.
-- **Respaldo de la BD**: automático cada día a las 03:15 en `/var/backups/genieacs-api` (14 copias). Manual: `sudo -u genieacs ./.venv/bin/python manage.py backup-db /var/backups/genieacs-api`. No copies el `.db` con `cp` mientras la API escribe: `backup-db` usa la API de backup de SQLite y la copia sale consistente. Guarda una copia fuera del servidor: contiene claves WiFi/PPPoE de los CPE.
+- **Respaldo de la BD**: automático cada día a las 03:15 en `/var/backups/genieacs-api` (14 copias). Manual: `sudo -u genieacs ./.venv/bin/python manage.py backup-db /var/backups/genieacs-api`. No copies el `.db` con `cp` mientras la API escribe: `backup-db` usa la API de backup de SQLite y la copia sale consistente. Guarda una copia fuera del servidor: contiene claves WiFi/PPPoE de los CPE. Este respaldo sirve para restaurar **esta** instalación, no para sembrar otra: para eso está el [catálogo de modelos](#llevar-el-catálogo-de-modelos-a-producción).
 - Restaurar: `systemctl stop genieacs-api`, copiar la copia sobre `genieacs_api.db`, `chown genieacs:genieacs` + `chmod 600`, `systemctl start genieacs-api`.
 - Un archivo de firmware cargado responde con su **SHA256**; compáralo con el publicado por el fabricante antes de un envío masivo (también queda en el journal).
+
+## Llevar el catálogo de modelos a producción
+
+El panel aprende los modelos equipo a equipo: hasta que alguien abre la ficha de un CPE, la instalación no sabe qué parámetros expone ese modelo ni qué instancia es su WAN. En un laboratorio eso se hace una vez y queda; una instalación nueva de producción **arrancaría en blanco**, aunque el trabajo de homologación ya estuviera hecho. El catálogo portable evita repetirlo: se exporta del laboratorio y se importa en producción.
+
+### Qué mueve el catálogo y qué mueve el respaldo
+
+Son dos cosas distintas y conviene no confundirlas:
+
+| | Catálogo de modelos (`GET /trees/export`) | Respaldo de la BD (`manage.py backup-db`) |
+|---|---|---|
+| Qué lleva | árbol de rutas por modelo (con la marca de escribible), raíz, identidad (fabricante/clase/modelo/firmware), perfil deducido y correcciones a mano | la base entera: usuarios, auditoría, nombres de abonado, respaldos de CPE con sus **claves WiFi/PPPoE** |
+| Qué **no** lleva | equipos (ni ids, ni seriales, ni quién aportó cada rama), valores de parámetros, credenciales | — |
+| Para qué sirve | sembrar **otra** instalación con lo aprendido | restaurar **ésta** tras un desastre |
+| Se mueve de máquina | sí, es el objetivo | no: son datos de clientes de esa instalación |
+
+De ahí que el catálogo **no sustituya al respaldo** ni al revés. El catálogo se puede pasar por correo interno sin exponer nada de ningún abonado; el respaldo, no.
+
+### Paso a paso
+
+1. **En el laboratorio, exportar.** En el panel, *Aprovisionamiento → Árboles → Catálogo portable*, **Exportar catálogo** descarga `catalogo-modelos-AAAA-MM-DD.json` y dice cuántos modelos y cuántas rutas lleva. Si no hay ningún árbol guardado no descarga nada y lo avisa, en vez de dejarte un archivo vacío que en producción parecería un traspaso hecho. Sin panel, con el token de admin:
+
+   ```bash
+   BASE=https://lab.example.com          # o, en la propia VM: http://127.0.0.1:8080
+   TOKEN=$(curl -s -X POST $BASE/auth/login -d 'username=admin&password=UnaClaveLarga123' \
+     | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+   curl -s $BASE/trees/export -H "Authorization: Bearer $TOKEN" -o catalogo-modelos.json
+   ```
+
+   Los dos endpoints son **solo de admin** (un usuario ISP recibe `403`). El archivo es un JSON con `formato`, `generado` (UTC), `modelos` e `ilegibles`; revisa por encima que trae los modelos que esperas antes de llevarlo. **Si `ilegibles` no es `0`**, esos modelos tenían el árbol guardado corrupto y se quedan fuera del archivo: abre la ficha de un equipo de cada uno —el árbol se rehace solo— y vuelve a exportar, o llévate el catálogo sabiendo que esos modelos no van.
+
+2. **Llevar el archivo** a la VM de producción (`scp catalogo-modelos.json root@<vm>:/root/`). No tiene nada sensible, pero sí revela el parque de modelos del ISP: trátalo como documentación interna.
+
+3. **En producción, importar.** En el panel, **Importar catálogo** del mismo apartado: se elige el `.json`, el navegador comprueba antes de mandarlo que es JSON, que trae `formato` y una lista `modelos` no vacía y que no pesa más de 40 MB (un catálogo sano son unos megas; la API corta en 64 MB con un `413`), y al terminar pinta el resultado y refresca la tabla de modelos. Sin panel, el archivo se manda tal cual como salió —no hay que tocarlo— contra la instalación de destino:
+
+   ```bash
+   BASE=https://panel.example.com
+   TOKEN=$(curl -s -X POST $BASE/auth/login -d 'username=admin&password=OtraClaveLarga123' \
+     | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+   curl -s -X POST $BASE/trees/import -H "Authorization: Bearer $TOKEN" \
+     -H 'Content-Type: application/json' --data-binary @catalogo-modelos.json
+   ```
+
+4. **Leer el resumen.** La respuesta dice exactamente qué entró:
+
+   ```json
+   {"modelos": 12, "nuevos": 9, "rutas_nuevas": 21417, "perfiles_nuevos": 9,
+    "correcciones": 3, "ignorados": []}
+   ```
+
+   `modelos` son los que se procesaron, `nuevos` los que en destino no existían, `rutas_nuevas` las rutas que la unión no tenía (en una instalación en blanco coincide con el total; en una con historia será menor, y eso es normal), `perfiles_nuevos` los perfiles que se sembraron porque el destino no tenía ninguno —solo cuenta si el archivo traía un perfil de verdad, así que un catálogo de modelos sin perfil no infla la cifra—, `correcciones` las correcciones a mano que se adoptaron, e `ignorados` las entradas que se descartaron, con el motivo cuando lo hay. Importar dos veces el mismo archivo es inofensivo: la segunda vez sale con `rutas_nuevas: 0` y sin perfiles ni correcciones nuevas.
+
+5. **Comprobar en el panel.** En *Aprovisionamiento → Árboles* ya están los modelos con sus rutas. Saldrán con **0 equipos** y el estado de árbol en "no se sabe" (`incompleto: null`): el catálogo no trae equipos, así que no hay nadie que respalde ese árbol y no se afirma que esté completo. Se rellena solo en cuanto se abra la ficha del primer CPE real de cada modelo.
+
+### La política de fusión: lo local manda
+
+Importar **no sobrescribe** lo que la instalación de destino sabe, porque lo que sabe lo dedujo de equipos reales de *su* flota:
+
+- **Las rutas se unen** con las locales, igual que cuando se aprenden solas. El archivo puede añadir ramas; no puede quitar ninguna ni desmarcar un escribible.
+- **Un perfil deducido localmente no se sustituye.** El perfil del archivo entra solo donde no había ninguno, como semilla para que el primer equipo no salga en blanco; en cuanto se lee un equipo real de ese modelo, la deducción local lo recalcula y lo sustituye. El archivo adelanta trabajo, no lo congela. Y «no hay perfil» no es «no hay fila»: la fila del catálogo se crea siempre porque de ella cuelgan las correcciones, pero si queda sin perfil, un archivo posterior que sí lo traiga lo rellena — importar dos catálogos en un orden u otro da el mismo resultado.
+- **Una corrección a mano local no se pisa.** Del archivo entran solo los conceptos que en destino están libres. Si en producción alguien ya corrigió la ruta de un concepto para ese modelo, esa corrección se queda.
+
+La consecuencia práctica: se puede importar en una instalación que ya lleva tiempo funcionando sin miedo a estropear su homologación. El caso contrario —querer que manden los datos del archivo— el importador no lo cubre, y hay que preparar el terreno antes: `DELETE /trees/{key}` olvida el árbol de ese modelo (y los equipos que lo respaldaban) para que el archivo lo rehaga, y `PUT /profiles/{key}/override` con `path: null` quita la corrección local para que entre la del archivo. Un perfil ya deducido aquí no se puede borrar por la API, así que el del archivo no entrará mientras el destino tenga uno; tampoco hace falta insistir, porque en cuanto se lea un equipo real de ese modelo el perfil se recalcula de ese equipo.
+
+### Límites y archivos con basura
+
+Están pensados para que un archivo equivocado no llene la memoria del servidor y para que una entrada mala no tumbe la importación entera:
+
+| Situación | Qué pasa |
+|---|---|
+| Cuerpo de más de 64 MB (`MAX_CATALOGO_BYTES`) | `413` en el middleware, por el tamaño declarado y **antes** de parsear: los topes de modelos y rutas están dentro del endpoint, y para llegar ahí pydantic ya habría materializado el JSON entero en memoria |
+| `formato` distinto de `1` | `422` y no se importa nada: esta versión solo lee el `1` |
+| Más de 2000 modelos (`MAX_MODELOS`) | `422` de validación del cuerpo, antes de tocar la BD; tampoco entra nada |
+| Entrada sin `key`, o con `paths` que no es un objeto o está vacío | a `ignorados` (`(sin clave)` si no había clave) y sigue con las demás |
+| Entrada con más de 50000 rutas (`MAX_RUTAS_POR_MODELO`) | a `ignorados`, diciendo cuántas traía |
+| Entrada cuyas rutas se quedan en nada tras descartar las claves que no son cadenas | a `ignorados` |
+| Campos de más en el archivo | se tiran: de cada ruta se conserva la ruta y si es escribible, nada más |
+
+**Queda rastro en la auditoría.** Importar un catálogo y olvidar el árbol de un modelo son cambios, no lecturas, así que aparecen en *Actividad* (y en `GET /auth/audit`) con quién, cuándo, desde qué IP y el `request_id`: «Importó un catálogo de N modelo(s)» y «Olvidó el árbol del modelo X». La auditoría dice cuántos modelos entraron, no cuáles: guarda el `.json` con su fecha si necesitas poder decir exactamente qué se sembró en producción.
 
 ## Seguridad
 

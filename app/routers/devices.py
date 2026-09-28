@@ -11,7 +11,7 @@ from ..deps import CurrentUser, authorized_device, current_user, tenant_query
 from ..genieacs import genie
 from ..parammap import pick_map, resolve
 from .. import catalog
-from ..treeprofile import capabilities, coverage, effective_params
+from ..treeprofile import capabilities, coverage, effective_params, wans
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
@@ -361,6 +361,10 @@ async def device_status(device_id: str, dev=Depends(authorized_device)):
     # que sabe hacer este modelo: el panel esconde lo que no soporta en vez de
     # ofrecer formularios que fallarian al pulsar
     result["capabilities"] = capabilities(full, pmap)
+    # TODAS las WAN configuradas, no solo por la que sale el trafico: un XX530
+    # tiene la de datos, la de gestion y las que estan puestas y caidas, y ver
+    # solo la activa esconde justo lo que se compara con el aprovisionamiento
+    result["wans"] = wans(full)
     for k in _STATUS_KEYS:
         r = eff.get(k) or resolve(pmap, k)
         if r:

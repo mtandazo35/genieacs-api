@@ -200,6 +200,153 @@ def _derive_tr181(vals: dict) -> dict:
             "ppp": ppps[0] if ppps else None, "pool": pool, "evidencia": ev}
 
 
+
+# ---------------------------------------------------------------------------
+# Todas las WAN, no solo la activa.
+#
+# `derive()` elige UNA interfaz (la de la ruta por defecto) porque la ficha
+# necesita saber por donde sale el equipo. Esto es otra pregunta: que WAN tiene
+# CONFIGURADAS, con su VLAN y su estado, que es lo que se compara contra lo que
+# el ISP quiso aprovisionar.
+
+def _vlan_de(vals: dict, iface_path: str) -> tuple[str | None, str | None]:
+    """(vlan, nombre de la terminacion) siguiendo LowerLayers hacia abajo.
+
+    En TR-181 la interfaz IP cuelga de una VLANTermination que es quien sabe el
+    VLANID: Device.IP.Interface.7 -> Device.Ethernet.VLANTermination.3 -> 100."""
+    bajo = str(vals.get(f"{iface_path}.LowerLayers") or "").rstrip(".")
+    if "VLANTermination" not in bajo:
+        return None, None
+    vid = vals.get(f"{bajo}.VLANID")
+    # 0 (y -1, que usa TR-098) son "sin etiquetar": pintarlo como VLAN 0 hace
+    # buscar en el router una VLAN que no existe
+    return _vlan_util(vid), vals.get(f"{bajo}.Name")
+
+
+def _vlan_util(vid) -> str | None:
+    v = str(vid or "").strip()
+    return None if v in ("", "0", "-1") else v
+
+
+def _cliente_dhcp(vals: dict, paths: list, iface_path: str) -> dict:
+    """El cliente DHCP de esa interfaz: de ahi salen gateway y DNS de verdad."""
+    for n in _instancias(paths, r"^Device\.DHCPv4\.Client\.(\d+)\."):
+        if str(vals.get(f"Device.DHCPv4.Client.{n}.Interface") or "").rstrip(".") == iface_path:
+            return {"estado_cliente": vals.get(f"Device.DHCPv4.Client.{n}.Status"),
+                    "gateway": _ip_util(vals.get(f"Device.DHCPv4.Client.{n}.IPRouters")),
+                    "dns": _ip_util(vals.get(f"Device.DHCPv4.Client.{n}.DNSServers"))}
+    return {}
+
+
+def _ip_util(v) -> str | None:
+    """Descarta los 0.0.0.0 y las listas de ceros que reporta un equipo sin enlace."""
+    if v in (None, ""):
+        return None
+    utiles = [x.strip() for x in str(v).split(",") if x.strip() not in ("", "0.0.0.0")]
+    return ", ".join(utiles) or None
+
+
+def wans(doc: dict) -> list[dict]:
+    """Las interfaces de lado WAN con lo que se sabe de cada una.
+
+    Se excluye la LAN (la del pool DHCP) y el bucle local; lo demas se devuelve
+    aunque este caido o sin IP, porque una WAN configurada y caida es
+    justamente lo que hay que ver."""
+    vals = {p: v for p, v, _w in flatten(doc)}
+    raiz = root_of(doc)
+    if raiz == "Device":
+        return _wans_tr181(vals)
+    if raiz == "InternetGatewayDevice":
+        return _wans_tr098(vals)
+    return []
+
+
+def _wans_tr181(vals: dict) -> list[dict]:
+    paths = list(vals)
+    perfil = _derive_tr181(vals)
+    lan, activa = perfil.get("lan"), perfil.get("wan")
+    salida = []
+    for i in _instancias(paths, r"^Device\.IP\.Interface\.(\d+)\."):
+        if i == lan:
+            continue
+        base = f"Device.IP.Interface.{i}"
+        ip = vals.get(f"{base}.IPv4Address.1.IPAddress")
+        if str(ip or "").startswith("127."):
+            continue
+        tipo = str(vals.get(f"{base}.IPv4Address.1.AddressingType") or "")
+        bajo = str(vals.get(f"{base}.LowerLayers") or "")
+        # IPCP es PPP negociando la IP: para el operador eso es una WAN PPPoE
+        modo = ("PPPoE" if tipo == "IPCP" or "PPP.Interface" in bajo
+                else "DHCP" if tipo == "DHCP"
+                else "Estatica" if tipo == "Static" else tipo or None)
+        vlan, nombre_vlan = _vlan_de(vals, base)
+        fila = {"path": base, "instancia": i,
+                "nombre": vals.get(f"{base}.Name") or nombre_vlan or None,
+                "vlan": vlan, "modo": modo, "ip": _ip_util(ip),
+                "estado": vals.get(f"{base}.Status"),
+                "activa": i == activa, "sobre": bajo.rstrip(".") or None}
+        # solo la IP, sin estado ni modo ni de que cuelga: el ACS no termino de
+        # leer esa rama. Decirlo es mejor que pintar una WAN con todo vacio
+        fila["incompleta"] = not any((modo, fila["estado"], fila["sobre"]))
+        fila.update(_cliente_dhcp(vals, paths, base))
+        if modo == "PPPoE":
+            ppp = _ref(bajo) if "PPP.Interface" in bajo else perfil.get("ppp")
+            if ppp:
+                fila["usuario"] = vals.get(f"Device.PPP.Interface.{ppp}.Username") or None
+                fila["estado"] = (vals.get(f"Device.PPP.Interface.{ppp}.ConnectionStatus")
+                                  or fila["estado"])
+        salida.append(fila)
+    # primero la que lleva el trafico, luego las que estan arriba
+    salida.sort(key=lambda f: (not f["activa"], str(f.get("estado")) != "Up",
+                               int(f["instancia"])))
+    return salida
+
+
+def _wans_tr098(vals: dict) -> list[dict]:
+    """En TR-098 cada WANIPConnection/WANPPPConnection ES una WAN."""
+    paths = list(vals)
+    activa = str(vals.get("InternetGatewayDevice.Layer3Forwarding.DefaultConnectionService")
+                 or "").rstrip(".")
+    salida = []
+    patron = (r"^(InternetGatewayDevice\.WANDevice\.\d+\.WANConnectionDevice\.\d+"
+              r"\.WAN(?:IP|PPP)Connection\.\d+)\.")
+    vistos = []
+    for p in paths:
+        m = re.match(patron, p)
+        if m and m.group(1) not in vistos:
+            vistos.append(m.group(1))
+    for base in vistos:
+        es_ppp = "WANPPPConnection" in base
+        fila = {"path": base, "instancia": base.rsplit(".", 1)[-1],
+                "nombre": vals.get(f"{base}.Name") or None,
+                "vlan": _vlan_tr098(vals, base),
+                "modo": "PPPoE" if es_ppp else (vals.get(f"{base}.AddressingType") or "DHCP"),
+                "ip": _ip_util(vals.get(f"{base}.ExternalIPAddress")),
+                "estado": vals.get(f"{base}.ConnectionStatus"),
+                "gateway": _ip_util(vals.get(f"{base}.DefaultGateway")),
+                "dns": _ip_util(vals.get(f"{base}.DNSServers")),
+                "activa": base == activa, "sobre": None}
+        if es_ppp:
+            fila["usuario"] = vals.get(f"{base}.Username") or None
+        salida.append(fila)
+    salida.sort(key=lambda f: (not f["activa"], str(f.get("estado")) != "Connected"))
+    return salida
+
+
+def _vlan_tr098(vals: dict, base: str) -> str | None:
+    """El VLANID lo marca cada fabricante en su propio parametro; -1 y 0 son
+    "sin etiquetar" (TR-098 usa -1 para eso)."""
+    return _vlan_util(_primero(vals, [f"{base}.X_TP_VLANIDMark", f"{base}.X_VLANID",
+                                      f"{base}.VLANIDMark"]))
+
+
+def _primero(vals: dict, rutas: list):
+    for r in rutas:
+        v = vals.get(r)
+        if v not in (None, ""):
+            return str(v)
+    return None
+
 def _derive_tr098(vals: dict) -> dict:
     paths = list(vals)
     ev = {}
