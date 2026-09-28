@@ -245,3 +245,20 @@ def test_el_generador_de_aprovisionamiento_sigue_avisando_de_lo_mismo():
     assert avisos, "el generador del script tambien tiene que llevar el aviso"
     aviso = "\n".join(avisos)
     assert "modo AP" in aviso and "7547" in aviso
+
+
+def test_la_casilla_de_la_opcion_125_esta_alineada_y_explicada():
+    """Salia el texto encima y la casilla suelta a la derecha, sin decir que hace.
+    `.chk` es la clase que el panel ya usa para alinear una casilla con los
+    campos de su fila."""
+    assert '<label class="chk"><input type="checkbox" id="dhcp-125"' in HTML
+    # y el porque: enterprise 3561 del BBF, que es lo que emite el generador
+    bloque = HTML.split('id="dhcp-125"')[1][:900]
+    assert "3561" in bloque and "RFC 3925" in bloque
+    assert "Huawei" in bloque          # los equipos por los que existe
+
+
+def test_el_numero_de_empresa_explicado_es_el_que_se_emite():
+    """Si alguien cambia el enterprise en el generador, la explicacion miente."""
+    from app.dhcp_tr069 import ENTERPRISE_BBF
+    assert int(ENTERPRISE_BBF, 16) == 3561
