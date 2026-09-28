@@ -571,8 +571,12 @@
                 <option value="ambas">Ambas por vendor-class (solo v7)</option>
               </select>
             </label>
-            <label>Incluir opción 125<input type="checkbox" id="dhcp-125" checked></label>
+            <label class="chk"><input type="checkbox" id="dhcp-125" checked> Incluir opción 125</label>
           </div>
+          <p class="muted small">La <b>opción 125</b> (RFC 3925) lleva la misma URL del ACS dentro del
+            espacio reservado a fabricantes, con el identificador 3561 del Broadband Forum. Existe porque
+            algunos Huawei y varias ONT no miran la opción 43 y solo leen ésta. Déjala marcada salvo que
+            tengas un motivo: va como una opción aparte del conjunto, y el equipo que no la pide la ignora.</p>
           <h4>Redes donde entregarlo</h4>
           <div id="dhcp-redes"></div>
           <button type="button" id="dhcp-add-red" class="ghost small">+ Añadir red</button>
