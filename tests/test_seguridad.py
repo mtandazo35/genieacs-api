@@ -289,3 +289,44 @@ def test_nbi_no_se_puede_apuntar_a_internet_ni_al_metadata(client, admin_h, monk
 
 def test_ajustes_solo_admin(client, isp_h):
     assert client.put("/settings", headers=isp_h, json={"nbi_url": "http://10.0.0.9:7557"}).status_code == 403
+
+
+# ---------- tokens deformes (PYSEC-2026-4141) ----------
+
+def _token_absurdamente_anidado() -> str:
+    """Un JWT cuyo payload es JSON valido pero anidado 20.000 niveles.
+
+    Es el token de PYSEC-2026-4141: json.loads lanza RecursionError, que PyJWT
+    no captura porque solo atrapa ValueError, asi que escapa como un tipo que
+    ningun manejador espera. 50 KB bastan y no hace falta firma valida.
+    """
+    import base64
+    import json as _json
+
+    def b64(raw: bytes) -> str:
+        return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+
+    cabecera = b64(_json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
+    hondo = b64((("[" * 20000) + ("]" * 20000)).encode())
+    return f"{cabecera}.{hondo}.{b64(b'firma-que-no-vale')}"
+
+
+def test_un_token_deforme_se_rechaza_sin_tumbar_al_worker(client):
+    """401 limpio, no un 500 ni una excepcion que suba hasta el worker.
+
+    Lo que nos deja fuera del fallo es que decode_token SIEMPRE verifica la
+    firma: el payload no llega a parsearse. Si alguien anade algun dia un
+    decode con verify_signature=False para "mirar el sub antes de validar",
+    esta prueba lo caza; sin ella, el sintoma seria el panel entero caido con
+    una peticion anonima.
+    """
+    r = client.get("/devices", headers={"Authorization": "Bearer " + _token_absurdamente_anidado()})
+
+    assert r.status_code == 401
+
+
+def test_el_token_deforme_tampoco_pasa_por_un_endpoint_de_admin(client):
+    r = client.get("/auth/users",
+                   headers={"Authorization": "Bearer " + _token_absurdamente_anidado()})
+
+    assert r.status_code == 401
